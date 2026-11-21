@@ -31,6 +31,8 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
   const [displayName, setDisplayName] = useState("");
   const [memberRoleId, setMemberRoleId] = useState("");
   const [addingMember, setAddingMember] = useState(false);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [inviteNotice, setInviteNotice] = useState<string | null>(null);
 
   const [roleName, setRoleName] = useState("");
   const [rolePermissions, setRolePermissions] = useState("");
@@ -91,6 +93,20 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
     }
   };
 
+  const handleSendInvite = async (membershipId: string) => {
+    setActionError(null);
+    setInviteNotice(null);
+    setInvitingId(membershipId);
+    try {
+      const res = await members.invite(familyId, membershipId);
+      setInviteNotice(res.detail);
+    } catch (err: unknown) {
+      setActionError(messageOf(err));
+    } finally {
+      setInvitingId(null);
+    }
+  };
+
   const handleCreateRole = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setActionError(null);
@@ -132,6 +148,7 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
       <h2 id="members-permissions-heading">Family members &amp; permissions</h2>
 
       {actionError && <p role="alert">{actionError}</p>}
+      {inviteNotice && <p role="status">{inviteNotice}</p>}
 
       <h3>Members</h3>
       {memberList.length === 0 ? (
@@ -155,6 +172,15 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
                   ))}
                 </select>
               </label>
+              {m.role_name.toLowerCase() === "parent" && (
+                <button
+                  type="button"
+                  disabled={invitingId === m.membership_id}
+                  onClick={() => void handleSendInvite(m.membership_id)}
+                >
+                  {invitingId === m.membership_id ? "Sending…" : "Send login link"}
+                </button>
+              )}
             </li>
           ))}
         </ul>

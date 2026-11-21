@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.login_token import LoginToken
+from app.models.parent_invite import ParentInvite
 from app.models.user import User
 from app.services.adapters.messaging import get_email_provider
 from app.services.errors import AuthError
@@ -142,6 +143,22 @@ def verify_sign_in_token(db: Session, token: str) -> User:
     now = datetime.now(timezone.utc)
     if row is None or row.used_at is not None or _as_utc(row.expires_at) < now:
         raise AuthError("Sign-in link is invalid, expired or already used")
+    row.used_at = now
+    db.commit()
+    user = db.get(User, row.user_id)
+    if user is None or user.status != "active":
+        raise AuthError("Account is not active")
+    return user
+
+
+def accept_parent_invite(db: Session, token: str) -> User:
+    """Use a parent invite link once and return the invited user (session is issued by the caller)."""
+    row = db.execute(
+        select(ParentInvite).where(ParentInvite.token_hash == _hash_token(token))
+    ).scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    if row is None or row.used_at is not None or _as_utc(row.expires_at) < now:
+        raise AuthError("Invite link is invalid, expired or already used")
     row.used_at = now
     db.commit()
     user = db.get(User, row.user_id)

@@ -141,7 +141,6 @@ function fieldsForStep(step: number, f: FormState): ParentProfileFields {
         relationship: textOrNull(f.relationship),
         date_of_birth: textOrNull(f.date_of_birth),
         approximate_age: f.date_of_birth ? null : numberOrNull(f.approximate_age),
-        profile_picture_url: textOrNull(f.profile_picture_url),
         preferred_language: textOrNull(f.preferred_language),
       };
     case 2:
@@ -302,7 +301,7 @@ export default function ParentOnboarding() {
               <select required value={form.relationship} onChange={update("relationship")}>
                 <option value="">Choose…</option>
                 {RELATIONSHIP_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
+                  <option key={opt} value={opt.toLowerCase()}>
                     {opt}
                   </option>
                 ))}

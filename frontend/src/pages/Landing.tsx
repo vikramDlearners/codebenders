@@ -78,7 +78,7 @@ export default function Landing() {
         setNotice(null);
         setStep("role");
       } else {
-        navigate("/");
+        navigate("/onboarding/parent");
       }
     } catch (err) {
       setError(errorText(err));

@@ -11,6 +11,7 @@ from app.models.parent_onboarding_profile import ParentOnboardingProfile
 from app.models.user import User
 from app.schemas import (
     LoginRequest,
+    ParentInviteAccept,
     ProfileIn,
     ProfileOut,
     RoleIn,
@@ -22,6 +23,7 @@ from app.schemas import (
     VerifyRequest,
 )
 from app.services.auth import (
+    accept_parent_invite,
     issue_session_token,
     login_with_otp,
     request_sign_in_link,
@@ -54,6 +56,15 @@ def request_link(body: SignInRequest, db: Session = DbSession) -> dict:
 @router.post("/verify", response_model=SessionOut)
 def verify(body: VerifyRequest, db: Session = DbSession) -> SessionOut:
     user = verify_sign_in_token(db, body.token)
+    return SessionOut(
+        session_token=issue_session_token(user.id),
+        user=UserOut(id=user.id, email=user.email, display_name=user.display_name),
+    )
+
+
+@router.post("/accept-invite", response_model=SessionOut)
+def accept_invite(body: ParentInviteAccept, db: Session = DbSession) -> SessionOut:
+    user = accept_parent_invite(db, body.token)
     return SessionOut(
         session_token=issue_session_token(user.id),
         user=UserOut(id=user.id, email=user.email, display_name=user.display_name),

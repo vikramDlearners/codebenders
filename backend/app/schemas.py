@@ -37,6 +37,10 @@ class VerifyRequest(BaseModel):
     token: str = Field(min_length=10, max_length=200)
 
 
+class ParentInviteAccept(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+
+
 class SessionOut(BaseModel):
     session_token: str
     user: UserOut

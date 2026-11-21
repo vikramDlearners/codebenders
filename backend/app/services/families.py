@@ -1,13 +1,20 @@
 """Families, members and roles. Every action is permission-checked and logged."""
 
+import secrets
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.family import Family
 from app.models.membership import FamilyMember
+from app.models.parent_invite import ParentInvite
 from app.models.role import Role, RolePermission
 from app.models.user import User
 from app.services.activity import log_activity
+from app.services.adapters.messaging import get_email_provider
+from app.services.auth import _hash_token
 from app.services.errors import NotFound
 from app.services.permissions import (
     DEFAULT_ROLES,
@@ -189,7 +196,47 @@ def membership_permissions(db: Session, actor_id: str, family_id: str) -> dict:
     return {"role": role.name if role else "", "permissions": sorted(permission_codes_for(db, membership))}
 
 
+def create_parent_invite(db: Session, actor_id: str, family_id: str, membership_id: str) -> str:
+    """Create a one-time sign-in link for a parent member and email it to them. Returns the email address."""
+    require(db, actor_id, family_id, "members.manage")
+    membership = db.get(FamilyMember, membership_id)
+    if membership is None or membership.family_id != family_id:
+        raise NotFound("Member not found")
+    role = db.get(Role, membership.role_id)
+    if role is None or role.name != "Parent":
+        raise ValueError("Sign-in links can only be sent to members with the Parent role")
+    user = db.get(User, membership.user_id)
+    if user is None or not user.email:
+        raise NotFound("Member has no email address to send the invite to")
+
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(hours=settings.parent_invite_hours)
+    db.add(
+        ParentInvite(
+            family_id=family_id,
+            membership_id=membership.id,
+            user_id=user.id,
+            email=user.email,
+            token_hash=_hash_token(token),
+            expires_at=expires,
+            created_by_user_id=actor_id,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    log_activity(db, family_id, actor_id, "parent_invite.created", "member", membership.id)
+    db.commit()
+
+    link = f"{settings.parent_invite_base_url}?token={token}"
+    get_email_provider().send(
+        user.email,
+        "You're invited to CareCircle",
+        f"Open this link within {settings.parent_invite_hours} hours to create your sign-in: {link}",
+    )
+    return user.email
+
+
 __all__ = [
+    "create_parent_invite",
     "PermissionDenied",
     "create_family",
     "list_families_for_user",

@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./carecircle_dev.db"
     secret_key: str = "dev-only-change-me"
     login_link_base_url: str = "http://localhost:5173/auth/verify"
+    parent_invite_base_url: str = "http://localhost:5173/parent/accept-invite"
+    parent_invite_hours: int = 72
     login_token_minutes: int = 15
     otp_minutes: int = 10
     dev_fixed_otp: Optional[str] = None

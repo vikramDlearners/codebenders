@@ -2,8 +2,8 @@
 // Interfaces mirror backend/app/schemas.py. Routes are verified against the
 // router files in backend/app/api/.
 
-export const API_BASE_URL: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+// Empty by default: requests stay same-origin and the Vite dev proxy forwards /api.
+export const API_BASE_URL: string = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
 const TOKEN_KEY = "carecircle.session_token";
 
@@ -45,6 +45,14 @@ export interface SignInRequest {
 
 export interface VerifyRequest {
   token: string;
+}
+
+export interface ParentInviteAccept {
+  token: string;
+}
+
+export interface InviteOut {
+  detail: string;
 }
 
 export interface SessionOut {
@@ -309,6 +317,13 @@ export async function verifyOtp(email: string, code: string): Promise<SessionOut
   return session;
 }
 
+export async function acceptParentInvite(token: string): Promise<SessionOut> {
+  const body: ParentInviteAccept = { token };
+  const session = await post<SessionOut>("/api/auth/accept-invite", body);
+  setSessionToken(session.session_token);
+  return session;
+}
+
 export function setRole(role: RoleChoice, otherRole: string | null): Promise<unknown> {
   const body: SetRoleRequest = { role, other_role: otherRole };
   return patch<unknown>("/api/auth/me/role", body);
@@ -331,6 +346,8 @@ export const members = {
     post<MemberOut>(`/api/families/${familyId}/members`, body),
   update: (familyId: string, membershipId: string, body: MemberRoleChange) =>
     patch<MemberOut>(`/api/families/${familyId}/members/${membershipId}`, body),
+  invite: (familyId: string, membershipId: string) =>
+    post<InviteOut>(`/api/families/${familyId}/members/${membershipId}/invite`),
 };
 
 // ---- care profiles (verified against api/care_profiles.py) ----
