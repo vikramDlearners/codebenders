@@ -10,3 +10,4 @@ carecircle_dev.db
 node_modules/
 .codebenders/
 .vscode/
+dist/

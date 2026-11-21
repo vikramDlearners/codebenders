@@ -1,0 +1,370 @@
+// Typed fetch client for the CareCircle API.
+// Interfaces mirror backend/app/schemas.py. Routes are verified against the
+// router files in backend/app/api/.
+
+export const API_BASE_URL: string =
+  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+
+const TOKEN_KEY = "carecircle.session_token";
+
+export function getSessionToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setSessionToken(token: string | null): void {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: string;
+
+  constructor(status: number, detail: string) {
+    super(`${status}: ${detail}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+// ---- Types (from schemas.py) ----
+
+export interface UserOut {
+  id: string;
+  email: string | null;
+  display_name: string;
+}
+
+export interface SignInRequest {
+  email: string;
+  display_name?: string | null;
+}
+
+export interface VerifyRequest {
+  token: string;
+}
+
+export interface SessionOut {
+  session_token: string;
+  user: UserOut;
+}
+
+export interface FamilyCreate {
+  name: string;
+}
+
+export interface FamilyOut {
+  id: string;
+  name: string;
+}
+
+export interface MemberOut {
+  membership_id: string;
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  role_id: string;
+  role_name: string;
+}
+
+export interface MemberCreate {
+  email: string;
+  display_name?: string | null;
+  role_id: string;
+}
+
+export interface MemberRoleChange {
+  role_id: string;
+}
+
+export interface RoleOut {
+  id: string;
+  name: string;
+  is_system: boolean;
+  permissions: string[];
+}
+
+export interface RoleCreate {
+  name: string;
+  permissions: string[];
+}
+
+export interface RolePermissionsUpdate {
+  permissions: string[];
+}
+
+export interface MyAccess {
+  role: string;
+  permissions: string[];
+}
+
+export interface CareProfileCreate {
+  display_name: string;
+  greeting_name: string;
+  preferred_language?: string;
+  timezone?: string;
+}
+
+export interface CareProfileUpdate {
+  display_name?: string | null;
+  greeting_name?: string | null;
+  preferred_language?: string | null;
+  timezone?: string | null;
+}
+
+export interface CareProfileOut {
+  id: string;
+  display_name: string;
+  greeting_name: string;
+  preferred_language: string;
+  timezone: string;
+}
+
+export interface MedicineCreate {
+  care_profile_id: string;
+  display_name: string;
+  instructions_text?: string | null;
+  quantity_remaining?: number | null;
+  refill_date?: string | null; // ISO date (YYYY-MM-DD)
+  responsible_user_id?: string | null;
+}
+
+export interface MedicineUpdate {
+  display_name?: string | null;
+  instructions_text?: string | null;
+  refill_date?: string | null;
+  responsible_user_id?: string | null;
+  active?: boolean | null;
+}
+
+export interface QuantityUpdate {
+  quantity: number;
+}
+
+export interface MedicineOut {
+  id: string;
+  care_profile_id: string;
+  display_name: string;
+  instructions_text: string | null;
+  quantity_remaining: number | null;
+  refill_date: string | null;
+  responsible_user_id: string | null;
+  active: boolean;
+}
+
+export interface TaskCreate {
+  title: string;
+  description?: string | null;
+  due_at?: string | null; // ISO datetime
+  priority?: string;
+  assigned_to_user_id?: string | null;
+  care_profile_id?: string | null;
+}
+
+export interface TaskAssign {
+  assignee_user_id: string;
+}
+
+export interface TaskStatusUpdate {
+  status: string;
+}
+
+export interface TaskUpdate {
+  title?: string | null;
+  description?: string | null;
+  due_at?: string | null;
+  priority?: string | null;
+}
+
+export interface TaskOut {
+  id: string;
+  title: string;
+  description: string | null;
+  due_at: string | null;
+  status: string;
+  priority: string;
+  assigned_to_user_id: string | null;
+  created_by_user_id: string;
+}
+
+export interface NotificationOut {
+  id: string;
+  family_id: string | null;
+  type: string;
+  payload: Record<string, unknown> | null;
+  status: string;
+  created_at: string;
+}
+
+export interface ActivityOut {
+  id: string;
+  actor_id: string | null;
+  action: string;
+  object_type: string;
+  object_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface IntentModeOut {
+  intent_mode: string;
+}
+
+export interface IntentModeUpdate {
+  intent_mode: string;
+}
+
+// ---- Core request helper ----
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  const token = getSessionToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    let detail = res.statusText || "Request failed";
+    try {
+      const data = (await res.json()) as { detail?: unknown };
+      if (data && data.detail !== undefined) {
+        detail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+      }
+    } catch {
+      // Body was not JSON; keep statusText.
+    }
+    throw new ApiError(res.status, detail);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+const get = <T>(path: string) => request<T>("GET", path);
+const post = <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? {});
+const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
+const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
+const del = <T = void>(path: string) => request<T>("DELETE", path);
+
+// ---- auth (paths confirmed in api/auth.py) ----
+
+export const auth = {
+  requestLink: (body: SignInRequest) =>
+    post<{ detail: string }>("/api/auth/request-link", body),
+  verify: async (body: VerifyRequest): Promise<SessionOut> => {
+    const session = await post<SessionOut>("/api/auth/verify", body);
+    setSessionToken(session.session_token);
+    return session;
+  },
+  me: () => get<UserOut>("/api/auth/me"),
+};
+
+// ---- families (verified against api/families.py) ----
+
+export const families = {
+  list: () => get<FamilyOut[]>("/api/families"),
+  create: (body: FamilyCreate) => post<FamilyOut>("/api/families", body),
+  get: (familyId: string) => get<FamilyOut>(`/api/families/${familyId}`),
+  me: (familyId: string) => get<MyAccess>(`/api/families/${familyId}/me`),
+};
+
+// ---- members (verified against api/families.py) ----
+
+export const members = {
+  list: (familyId: string) => get<MemberOut[]>(`/api/families/${familyId}/members`),
+  create: (familyId: string, body: MemberCreate) =>
+    post<MemberOut>(`/api/families/${familyId}/members`, body),
+  update: (familyId: string, membershipId: string, body: MemberRoleChange) =>
+    patch<MemberOut>(`/api/families/${familyId}/members/${membershipId}`, body),
+};
+
+// ---- care profiles (verified against api/care_profiles.py) ----
+
+export const careProfiles = {
+  list: (familyId: string) => get<CareProfileOut[]>(`/api/families/${familyId}/care-profiles`),
+  create: (familyId: string, body: CareProfileCreate) =>
+    post<CareProfileOut>(`/api/families/${familyId}/care-profiles`, body),
+  get: (familyId: string, profileId: string) =>
+    get<CareProfileOut>(`/api/families/${familyId}/care-profiles/${profileId}`),
+  update: (familyId: string, profileId: string, body: CareProfileUpdate) =>
+    patch<CareProfileOut>(`/api/families/${familyId}/care-profiles/${profileId}`, body),
+  delete: (familyId: string, profileId: string) =>
+    del(`/api/families/${familyId}/care-profiles/${profileId}`),
+};
+
+// ---- medicines (verified against api/medicines.py) ----
+
+export const medicines = {
+  list: (familyId: string) => get<MedicineOut[]>(`/api/families/${familyId}/medicines`),
+  create: (familyId: string, body: MedicineCreate) =>
+    post<MedicineOut>(`/api/families/${familyId}/medicines`, body),
+  get: (familyId: string, medicineId: string) =>
+    get<MedicineOut>(`/api/families/${familyId}/medicines/${medicineId}`),
+  update: (familyId: string, medicineId: string, body: MedicineUpdate) =>
+    patch<MedicineOut>(`/api/families/${familyId}/medicines/${medicineId}`, body),
+  delete: (familyId: string, medicineId: string) =>
+    del(`/api/families/${familyId}/medicines/${medicineId}`),
+  updateQuantity: (familyId: string, medicineId: string, body: QuantityUpdate) =>
+    patch<MedicineOut>(`/api/families/${familyId}/medicines/${medicineId}/quantity`, body),
+};
+
+// ---- tasks (verified against api/tasks.py) ----
+
+export const tasks = {
+  list: (familyId: string) => get<TaskOut[]>(`/api/families/${familyId}/tasks`),
+  create: (familyId: string, body: TaskCreate) =>
+    post<TaskOut>(`/api/families/${familyId}/tasks`, body),
+  get: (familyId: string, taskId: string) =>
+    get<TaskOut>(`/api/families/${familyId}/tasks/${taskId}`),
+  update: (familyId: string, taskId: string, body: TaskUpdate) =>
+    patch<TaskOut>(`/api/families/${familyId}/tasks/${taskId}`, body),
+  delete: (familyId: string, taskId: string) =>
+    del(`/api/families/${familyId}/tasks/${taskId}`),
+  assign: (familyId: string, taskId: string, body: TaskAssign) =>
+    post<TaskOut>(`/api/families/${familyId}/tasks/${taskId}/assign`, body),
+  complete: (familyId: string, taskId: string) =>
+    post<TaskOut>(`/api/families/${familyId}/tasks/${taskId}/complete`),
+  updateStatus: (familyId: string, taskId: string, body: TaskStatusUpdate) =>
+    patch<TaskOut>(`/api/families/${familyId}/tasks/${taskId}/status`, body),
+};
+
+// ---- activity (verified against api/activity.py) ----
+
+export const activity = {
+  list: (familyId: string) => get<ActivityOut[]>(`/api/families/${familyId}/activity`),
+};
+
+// ---- roles (verified against api/roles.py) ----
+
+export const roles = {
+  list: (familyId: string) => get<RoleOut[]>(`/api/families/${familyId}/roles`),
+  create: (familyId: string, body: RoleCreate) =>
+    post<RoleOut>(`/api/families/${familyId}/roles`, body),
+  updatePermissions: (familyId: string, roleId: string, body: RolePermissionsUpdate) =>
+    put<RoleOut>(`/api/families/${familyId}/roles/${roleId}/permissions`, body),
+};
+
+// ---- settings: intent mode (verified against api/settings.py) ----
+
+export const intentMode = {
+  get: (familyId: string) => get<IntentModeOut>(`/api/families/${familyId}/settings/intent-mode`),
+  put: (familyId: string, body: IntentModeUpdate) =>
+    put<IntentModeOut>(`/api/families/${familyId}/settings/intent-mode`, body),
+};
+
+// ---- notifications (verified against api/notifications.py) ----
+
+export const notifications = {
+  list: () => get<NotificationOut[]>("/api/notifications"),
+  markRead: (notificationId: string) =>
+    post<NotificationOut>(`/api/notifications/${notificationId}/read`),
+};
+
