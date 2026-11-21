@@ -68,7 +68,7 @@ export default function SignIn({ onSignedIn }: SignInProps) {
   }
 
   return (
-    <main>
+    <main className="signin-card">
       <h1>Sign in / Create family</h1>
 
       {error && <p role="alert">{error}</p>}
@@ -76,11 +76,11 @@ export default function SignIn({ onSignedIn }: SignInProps) {
 
       {step === "request" && (
         <form onSubmit={handleRequest}>
-          <label>
+          <label className="form-field">
             Email
             <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
-          <label>
+          <label className="form-field">
             Display name (optional)
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={255} />
           </label>
@@ -92,7 +92,7 @@ export default function SignIn({ onSignedIn }: SignInProps) {
 
       {step === "verify" && (
         <form onSubmit={handleVerify}>
-          <label>
+          <label className="form-field">
             Sign-in token
             <input
               required
@@ -110,7 +110,7 @@ export default function SignIn({ onSignedIn }: SignInProps) {
 
       {step === "family" && (
         <form onSubmit={handleCreateFamily}>
-          <label>
+          <label className="form-field">
             Family name
             <input
               required
