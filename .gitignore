@@ -1,0 +1,12 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+*.db
+*.sqlite
+carecircle_dev.db
+.pytest_cache/
+node_modules/
+.codebenders/
+.vscode/
