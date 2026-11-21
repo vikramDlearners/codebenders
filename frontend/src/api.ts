@@ -34,6 +34,8 @@ export interface UserOut {
   id: string;
   email: string | null;
   display_name: string;
+  role?: string | null;
+  other_role?: string | null;
 }
 
 export interface SignInRequest {
@@ -215,6 +217,27 @@ export interface IntentModeUpdate {
   intent_mode: string;
 }
 
+export interface SignUpRequest {
+  email: string;
+  display_name: string;
+}
+
+export interface LoginRequest {
+  email: string;
+}
+
+export interface VerifyOtpRequest {
+  email: string;
+  code: string;
+}
+
+export type RoleChoice = "parent" | "caretaker" | "hospital" | "child_of_parent" | "others";
+
+export interface SetRoleRequest {
+  role: RoleChoice;
+  other_role: string | null;
+}
+
 // ---- Core request helper ----
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -266,6 +289,30 @@ export const auth = {
   },
   me: () => get<UserOut>("/api/auth/me"),
 };
+
+// ---- email OTP auth (paths from backend api/auth.py) ----
+
+export function signUp(email: string, displayName: string): Promise<unknown> {
+  const body: SignUpRequest = { email, display_name: displayName.trim() };
+  return post<unknown>("/api/auth/signup", body);
+}
+
+export function login(email: string): Promise<unknown> {
+  const body: LoginRequest = { email };
+  return post<unknown>("/api/auth/login", body);
+}
+
+export async function verifyOtp(email: string, code: string): Promise<SessionOut> {
+  const body: VerifyOtpRequest = { email, code };
+  const session = await post<SessionOut>("/api/auth/verify-otp", body);
+  setSessionToken(session.session_token);
+  return session;
+}
+
+export function setRole(role: RoleChoice, otherRole: string | null): Promise<unknown> {
+  const body: SetRoleRequest = { role, other_role: otherRole };
+  return patch<unknown>("/api/auth/me/role", body);
+}
 
 // ---- families (verified against api/families.py) ----
 
@@ -367,4 +414,51 @@ export const notifications = {
   markRead: (notificationId: string) =>
     post<NotificationOut>(`/api/notifications/${notificationId}/read`),
 };
+
+// ---- parent onboarding profile (backend GET/PATCH /api/auth/me/profile) ----
+
+export type ProfileSection = "parent" | "communication" | "care" | "medical" | "additional";
+
+export interface ProfileCompletion {
+  overall: number;
+  sections: Record<ProfileSection, number>;
+}
+
+export interface ParentProfileOut {
+  parent_full_name: string | null;
+  preferred_name: string | null;
+  relationship: string | null;
+  date_of_birth: string | null; // ISO date (YYYY-MM-DD)
+  approximate_age: number | null;
+  age: number | null;
+  profile_picture_url: string | null;
+  preferred_language: string | null;
+  parent_mobile: string | null;
+  known_health_conditions: string | null;
+  allergies: string | null;
+  primary_doctor_name: string | null;
+  doctor_contact_number: string | null;
+  preferred_hospital: string | null;
+  care_instructions: string | null;
+  caregiver_name: string | null;
+  caregiver_relationship: string | null;
+  caregiver_phone: string | null;
+  caregiver_email: string | null;
+  completion: ProfileCompletion;
+}
+
+// Any subset of the editable profile fields. Empty values are sent as null.
+export type ParentProfileFields = Partial<Omit<ParentProfileOut, "age" | "completion">>;
+
+export function getProfile(): Promise<ParentProfileOut> {
+  return get<ParentProfileOut>("/api/auth/me/profile");
+}
+
+export function saveProfileSection(
+  section: ProfileSection,
+  fields: ParentProfileFields,
+): Promise<ParentProfileOut> {
+  return patch<ParentProfileOut>("/api/auth/me/profile", { section, ...fields });
+}
+
 

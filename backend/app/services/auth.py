@@ -55,6 +55,86 @@ def request_sign_in_link(db: Session, email: str, display_name: str | None = Non
     )
 
 
+def _otp_hash(user_id: str, purpose: str, code: str) -> str:
+    # Keyed HMAC; user and purpose are bound in so equal codes never share a hash.
+    msg = f"{user_id}:{purpose}:{code}".encode("utf-8")
+    return hmac.new(settings.secret_key.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+
+
+def create_otp(db: Session, user: User, purpose: str) -> str:
+    """Generate a 6-digit code, store only its HMAC, and return the code."""
+    now = datetime.now(timezone.utc)
+    previous = db.execute(
+        select(LoginToken).where(LoginToken.user_id == user.id, LoginToken.used_at.is_(None))
+    ).scalars().all()
+    for row in previous:
+        row.used_at = now
+    code = settings.dev_fixed_otp or f"{secrets.randbelow(1_000_000):06d}"
+    expires = now + timedelta(minutes=settings.otp_minutes)
+    db.add(
+        LoginToken(
+            user_id=user.id,
+            token_hash=_otp_hash(user.id, purpose, code),
+            expires_at=expires,
+        )
+    )
+    db.commit()
+    return code
+
+
+def signup_with_otp(db: Session, email: str, display_name: str) -> None:
+    email = email.strip().lower()
+    existing = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if existing is not None:
+        raise AuthError("An account with this email already exists; sign in instead")
+    user = User(email=email, display_name=display_name.strip())
+    db.add(user)
+    db.commit()
+    code = create_otp(db, user, "signup")
+    get_email_provider().send(
+        email,
+        "Your CareCircle verification code",
+        f"Your CareCircle verification code is {code}. It expires in {settings.otp_minutes} minutes.",
+    )
+
+
+def login_with_otp(db: Session, email: str) -> None:
+    # Silent for unknown or inactive emails so accounts cannot be probed.
+    email = email.strip().lower()
+    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is None or user.status != "active":
+        return
+    code = create_otp(db, user, "login")
+    get_email_provider().send(
+        email,
+        "Your CareCircle verification code",
+        f"Your CareCircle verification code is {code}. It expires in {settings.otp_minutes} minutes.",
+    )
+
+
+def verify_otp(db: Session, email: str, code: str) -> User:
+    # No attempt counter: LoginToken has no attempts column, so guesses are not capped per code.
+    email = email.strip().lower()
+    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is None or user.status != "active":
+        raise AuthError("Code is invalid or expired")
+    now = datetime.now(timezone.utc)
+    row = db.execute(
+        select(LoginToken)
+        .where(LoginToken.user_id == user.id, LoginToken.used_at.is_(None))
+        .order_by(LoginToken.created_at.desc())
+    ).scalars().first()
+    if row is None or _as_utc(row.expires_at) < now:
+        raise AuthError("Code is invalid or expired")
+    if not any(
+        hmac.compare_digest(row.token_hash, _otp_hash(user.id, p, code)) for p in ("signup", "login")
+    ):
+        raise AuthError("Code is invalid or expired")
+    row.used_at = now
+    db.commit()
+    return user
+
+
 def verify_sign_in_token(db: Session, token: str) -> User:
     row = db.execute(
         select(LoginToken).where(LoginToken.token_hash == _hash_token(token))

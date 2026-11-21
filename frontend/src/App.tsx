@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Route, Routes, useParams } from "react-router-dom";
 import SignIn from "./pages/SignIn";
+import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import ParentProfile from "./pages/ParentProfile";
 import MedicineList from "./pages/MedicineList";
@@ -17,6 +18,7 @@ import ParentHome from "./pages/ParentHome";
 import ParentCheckin from "./pages/ParentCheckin";
 import ParentConfirmation from "./pages/ParentConfirmation";
 import ParentHelp from "./pages/ParentHelp";
+import ParentOnboarding from "./pages/ParentOnboarding";
 
 // Reads :familyId from the URL and renders the page with it.
 function FamilyRoute({ render }: { render: (familyId: string) => ReactNode }) {
@@ -37,7 +39,8 @@ function MedicineRoute({
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<SignIn />} />
+      <Route path="/" element={<Landing />} />
+      <Route path="/signin" element={<SignIn />} />
 
       <Route path="/family/:familyId" element={<Dashboard />} />
       <Route
@@ -88,6 +91,7 @@ export default function App() {
       <Route path="/parent/checkin" element={<ParentCheckin />} />
       <Route path="/parent/confirmation" element={<ParentConfirmation />} />
       <Route path="/parent/help" element={<ParentHelp />} />
+      <Route path="/onboarding/parent" element={<ParentOnboarding />} />
     </Routes>
   );
 }

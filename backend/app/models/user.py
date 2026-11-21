@@ -23,6 +23,8 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     display_name: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(32), default="active")
+    role: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
+    other_role: Mapped[str | None] = mapped_column(String(120), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )

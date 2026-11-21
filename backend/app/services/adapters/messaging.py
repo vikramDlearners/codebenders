@@ -6,7 +6,9 @@ plugged in later behind the same protocols. Mock is the default.
 """
 
 import logging
+import smtplib
 from dataclasses import dataclass, field
+from email.message import EmailMessage
 from typing import Protocol
 
 from app.core.config import settings
@@ -48,12 +50,31 @@ class LoggingSmsProvider:
         logger.info("MOCK SMS to=%s", to)
 
 
+@dataclass
+class SmtpEmailProvider:
+    def send(self, to: str, subject: str, body: str) -> None:
+        msg = EmailMessage()
+        msg["From"] = settings.smtp_from
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.set_content(body)
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+            server.starttls()
+            if settings.smtp_user and settings.smtp_password:
+                server.login(settings.smtp_user, settings.smtp_password)
+            server.send_message(msg)
+        logger.info("SMTP EMAIL sent to=%s subject=%s", to, subject)
+
+
 _email_provider: EmailProvider = LoggingEmailProvider()
+_smtp_email_provider: EmailProvider = SmtpEmailProvider()
 _sms_provider: SmsProvider = LoggingSmsProvider()
 
 
 def get_email_provider() -> EmailProvider:
-    # Only the logging/mock implementation exists in Phase 1, regardless of SMTP settings.
+    # Real SMTP when smtp_host is set in .env; otherwise the logging mock.
+    if settings.smtp_host:
+        return _smtp_email_provider
     return _email_provider
 
 

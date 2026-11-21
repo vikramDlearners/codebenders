@@ -1,14 +1,31 @@
 """Request and response models for the API."""
 
 from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class UserOut(BaseModel):
     id: str
     email: str | None
     display_name: str
+    role: str | None = None
+    other_role: str | None = None
+
+
+class RoleIn(BaseModel):
+    role: Literal["parent", "caretaker", "hospital", "child_of_parent", "others"]
+    other_role: str | None = Field(default=None, max_length=120)
+
+    @model_validator(mode="after")
+    def _require_other_role_for_others(self) -> "RoleIn":
+        if self.role == "others":
+            text = (self.other_role or "").strip()
+            if not text:
+                raise ValueError("other_role is required when role is 'others'")
+            self.other_role = text
+        return self
 
 
 class SignInRequest(BaseModel):
@@ -188,4 +205,129 @@ class TaskUpdate(BaseModel):
     description: str | None = None
     due_at: datetime | None = None
     priority: str | None = None
+
+
+class SignUpRequest(BaseModel):
+    email: str
+    display_name: str = Field(min_length=1, max_length=255)
+
+
+class LoginRequest(BaseModel):
+    email: str
+
+
+class VerifyOtpRequest(BaseModel):
+    email: str
+    code: str = Field(min_length=6, max_length=6)
+
+
+RelationshipIn = Literal["mother", "father", "grandmother", "grandfather", "other"]
+LanguageIn = Literal["English", "Tamil", "Hindi", "Telugu", "Malayalam", "Kannada"]
+SectionIn = Literal["parent", "communication", "care", "medical", "additional"]
+
+# Which profile fields each onboarding section may write.
+SECTION_FIELDS: dict[str, tuple[str, ...]] = {
+    "parent": (
+        "parent_full_name",
+        "preferred_name",
+        "relationship",
+        "date_of_birth",
+        "approximate_age",
+        "preferred_language",
+    ),
+    "communication": ("parent_mobile", "preferred_language"),
+    "care": ("caregiver_name", "caregiver_relationship", "caregiver_phone", "caregiver_email"),
+    "medical": (
+        "known_health_conditions",
+        "allergies",
+        "primary_doctor_name",
+        "doctor_contact_number",
+        "preferred_hospital",
+        "care_instructions",
+    ),
+    "additional": ("profile_picture_url",),
+}
+
+
+class ProfileIn(BaseModel):
+    section: SectionIn
+    parent_full_name: str | None = Field(default=None, max_length=120)
+    preferred_name: str | None = Field(default=None, max_length=60)
+    relationship: RelationshipIn | None = None
+    date_of_birth: date | None = None
+    approximate_age: int | None = Field(default=None, ge=0, le=150)
+    profile_picture_url: str | None = Field(default=None, max_length=500)
+    preferred_language: LanguageIn | None = None
+    parent_mobile: str | None = Field(default=None, max_length=20)
+    known_health_conditions: str | None = None
+    allergies: str | None = None
+    primary_doctor_name: str | None = Field(default=None, max_length=120)
+    doctor_contact_number: str | None = Field(default=None, max_length=30)
+    preferred_hospital: str | None = Field(default=None, max_length=160)
+    care_instructions: str | None = None
+    caregiver_name: str | None = Field(default=None, max_length=120)
+    caregiver_relationship: str | None = Field(default=None, max_length=60)
+    caregiver_phone: str | None = Field(default=None, max_length=30)
+    caregiver_email: str | None = Field(default=None, max_length=254)
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _strip_text(cls, value: object) -> object:
+        # Blank strings count as not sent, so they clear the field instead of being stored.
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def _dob_not_future(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("date_of_birth cannot be in the future")
+        return value
+
+    @model_validator(mode="after")
+    def _check_section(self) -> "ProfileIn":
+        if self.section == "parent":
+            for name in ("parent_full_name", "preferred_name", "relationship"):
+                if not getattr(self, name):
+                    raise ValueError(f"{name} is required in the parent section")
+        allowed = set(SECTION_FIELDS[self.section])
+        stray = sorted(
+            name
+            for name in self.model_fields_set
+            if name != "section" and name not in allowed
+        )
+        if stray:
+            raise ValueError(f"fields not allowed in section '{self.section}': {', '.join(stray)}")
+        return self
+
+
+class CompletionOut(BaseModel):
+    overall: int
+    sections: dict[str, int]
+
+
+class ProfileOut(BaseModel):
+    parent_full_name: str | None
+    preferred_name: str | None
+    relationship: str | None
+    date_of_birth: date | None
+    approximate_age: int | None
+    age: int | None
+    profile_picture_url: str | None
+    preferred_language: str | None
+    parent_mobile: str | None
+    known_health_conditions: str | None
+    allergies: str | None
+    primary_doctor_name: str | None
+    doctor_contact_number: str | None
+    preferred_hospital: str | None
+    care_instructions: str | None
+    caregiver_name: str | None
+    caregiver_relationship: str | None
+    caregiver_phone: str | None
+    caregiver_email: str | None
+    updated_at: datetime | None
+    completion: CompletionOut
+
 

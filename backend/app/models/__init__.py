@@ -6,6 +6,7 @@ from app.models.family import Family
 from app.models.role import Role, RolePermission
 from app.models.membership import FamilyMember
 from app.models.care_profile import CareProfile
+from app.models.parent_onboarding_profile import ParentOnboardingProfile
 from app.models.medicine import Medicine
 from app.models.task import Task
 from app.models.notification import Notification
@@ -20,6 +21,7 @@ __all__ = [
     "RolePermission",
     "FamilyMember",
     "CareProfile",
+    "ParentOnboardingProfile",
     "Medicine",
     "Task",
     "Notification",

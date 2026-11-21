@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     secret_key: str = "dev-only-change-me"
     login_link_base_url: str = "http://localhost:5173/auth/verify"
     login_token_minutes: int = 15
+    otp_minutes: int = 10
+    dev_fixed_otp: Optional[str] = None
+
 
     smtp_host: Optional[str] = None
     smtp_port: int = 587
