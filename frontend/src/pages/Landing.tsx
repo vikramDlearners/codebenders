@@ -4,6 +4,7 @@ import "../auth.css";
 import {
   ApiError,
   auth,
+  families,
   getSessionToken,
   login,
   setRole,
@@ -14,7 +15,7 @@ import {
 } from "../api";
 
 // Sign up / log in with an emailed 6-digit code, then (new users) pick a role.
-// Steps: login | signup -> code -> role -> /onboarding/parent
+// Steps: login | signup -> code -> role -> /onboarding/parent (parents: /parent/chat)
 
 type Step = "login" | "signup" | "code" | "role";
 
@@ -25,6 +26,18 @@ const ROLE_OPTIONS: { value: RoleChoice; label: string; hint: string; icon: stri
   { value: "hospital", label: "Hospital staff", hint: "Doctor or care team", icon: "🩺" },
   { value: "others", label: "Someone else", hint: "Tell us your role", icon: "✳" },
 ];
+
+// A parent added by their family has no account role yet; their family role says "Parent".
+async function isFamilyParent(): Promise<boolean> {
+  try {
+    const list = await families.list();
+    if (list.length === 0) return false;
+    const access = await families.me(list[0].id);
+    return access.role === "Parent";
+  } catch {
+    return false;
+  }
+}
 
 const CODE_LENGTH = 6;
 const RESEND_SECONDS = 30;
@@ -51,8 +64,9 @@ export default function Landing() {
     if (getSessionToken() == null) return;
     async function restoreSession() {
       try {
-        await auth.me();
-        navigate("/onboarding/parent");
+        const me = await auth.me();
+        const parent = me.role === "parent" || (me.role == null && (await isFamilyParent()));
+        navigate(parent ? "/parent/chat" : "/onboarding/parent");
       } catch {
         // Token is invalid or expired (including 401): forget it and stay here.
         setSessionToken(null);
@@ -140,10 +154,15 @@ export default function Landing() {
       // verifyOtp stores session_token the same way auth.verify does.
       const session = await verifyOtp(email.trim(), fullCode);
       if (session.user.role == null) {
+        if (await isFamilyParent()) {
+          navigate("/parent/chat");
+          return;
+        }
         setNotice(null);
         setStep("role");
       } else {
-        navigate("/onboarding/parent");
+        // Parents go straight to their check-in chat; everyone else to onboarding.
+        navigate(session.user.role === "parent" ? "/parent/chat" : "/onboarding/parent");
       }
     } catch (err) {
       setError(errorText(err));
@@ -213,7 +232,7 @@ export default function Landing() {
     setError(null);
     try {
       await setRole(selectedRole, selectedRole === "others" ? other : null);
-      navigate("/onboarding/parent");
+      navigate(selectedRole === "parent" ? "/parent/chat" : "/onboarding/parent");
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -443,6 +462,13 @@ export default function Landing() {
                   </label>
                 ))}
               </fieldset>
+
+              {selectedRole === "parent" && (
+                <p className="au-sub" role="note">
+                  A family member needs to add you with this email or phone number before your daily check-in
+                  chat opens.
+                </p>
+              )}
 
               {selectedRole === "others" && (
                 <label className="au-field">

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../medicines.css";
+import "../prescription-scan.css";
 import WorkspaceLayout from "../components/WorkspaceLayout";
 import { createCareProfileFromOnboarding } from "../careProfileSetup";
 import {
@@ -8,6 +9,7 @@ import {
   ImageUploadUnavailable,
   uploadMedicineImage,
   useMedicineImage,
+  formatPrice,
 } from "../medicineImage";
 import {
   ApiError,
@@ -59,6 +61,14 @@ export default function MedicineForm({
   const [refillDate, setRefillDate] = useState("");
   const [responsible, setResponsible] = useState("");
   const [active, setActive] = useState(true);
+  // Pricing: price per tablet and how many tablets were bought; the server computes the total.
+  const [unitPrice, setUnitPrice] = useState("");
+  const [totalCount, setTotalCount] = useState("");
+  // Reminder times (HH:MM); saved with a PUT after the medicine itself is saved.
+  const [times, setTimes] = useState<string[]>([]);
+  // What the server had when loaded; null means the load failed, so we must not overwrite it.
+  const [loadedTimes, setLoadedTimes] = useState<string[] | null>([]);
+  const [linkedScanId, setLinkedScanId] = useState<string | null>(null);
 
   // Medicine photo. Only members with medicines.edit can add or remove it.
   const [canEditPhoto, setCanEditPhoto] = useState(true);
@@ -98,11 +108,19 @@ export default function MedicineForm({
       members.list(familyId).catch(() => [] as MemberOut[]),
       isEdit ? medicines.get(familyId, medicineId) : Promise.resolve(null),
       families.me(familyId).catch(() => null),
+      isEdit
+        ? medicines
+            .getReminders(familyId, medicineId)
+            .then((r) => r.times)
+            .catch(() => null as string[] | null)
+        : Promise.resolve([] as string[] | null),
     ])
-      .then(([profileList, memberList, med, access]) => {
+      .then(([profileList, memberList, med, access, reminderTimes]) => {
         if (cancelled) return;
         setProfiles(profileList);
         setPeople(memberList);
+        setTimes(reminderTimes ?? []);
+        setLoadedTimes(reminderTimes);
         // If permissions can't be read, show the controls; the server still enforces them.
         setCanEditPhoto(access ? access.permissions.includes("medicines.edit") : true);
         if (med) {
@@ -113,6 +131,9 @@ export default function MedicineForm({
           setRefillDate(med.refill_date ?? "");
           setResponsible(med.responsible_user_id ?? "");
           setActive(med.active);
+          setUnitPrice(med.unit_price != null ? String(Number(med.unit_price)) : "");
+          setTotalCount(med.total_medicine_count != null ? String(med.total_medicine_count) : "");
+          setLinkedScanId(med.prescription_scan_id ?? null);
         } else {
           setProfileId((current) => current || profileList[0]?.id || "");
         }
@@ -134,11 +155,27 @@ export default function MedicineForm({
       setError("Please enter the medicine name.");
       return;
     }
+    if (unitPrice.trim() !== "" && !(Number(unitPrice) >= 0)) {
+      setError("Price per tablet must be 0 or more.");
+      return;
+    }
+    if (totalCount.trim() !== "" && !(Number.isInteger(Number(totalCount)) && Number(totalCount) >= 0)) {
+      setError("Tablets bought must be a whole number, 0 or more.");
+      return;
+    }
+    if (times.some((t) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))) {
+      setError("Please fill in every reminder time, or remove the empty ones.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const refill = refillDate === "" ? null : refillDate;
       const owner = responsible === "" ? null : responsible;
+      const pricing = {
+        unit_price: unitPrice.trim() === "" ? null : Number(unitPrice),
+        total_medicine_count: totalCount.trim() === "" ? null : Number(totalCount),
+      };
       let result: MedicineOut;
 
       if (isEdit) {
@@ -148,6 +185,7 @@ export default function MedicineForm({
           refill_date: refill,
           responsible_user_id: owner,
           active,
+          ...pricing,
         };
         result = await medicines.update(familyId, medicineId, body);
       } else {
@@ -168,7 +206,16 @@ export default function MedicineForm({
           responsible_user_id: owner,
         };
         result = await medicines.create(familyId, body);
+        // Create doesn't accept pricing; set it with a follow-up update.
+        if (pricing.unit_price !== null || pricing.total_medicine_count !== null) {
+          result = await medicines.update(familyId, result.id, pricing);
+        }
       }
+      // Reminder times are saved separately too (PUT replaces them all).
+      // Skipped when unchanged, and when the load failed (it would wipe the existing times).
+      const changed =
+        loadedTimes !== null && JSON.stringify([...new Set(times)].sort()) !== JSON.stringify([...loadedTimes].sort());
+      if (changed) await medicines.setReminders(familyId, result.id, times);
       // Photo is a separate upload after the medicine itself is saved.
       let photoProblem: string | null = null;
       try {
@@ -300,6 +347,94 @@ export default function MedicineForm({
                     ))}
                   </select>
                 </label>
+
+                <div className="mf-span mf-price">
+                  <div className="mf-price-head">
+                    <strong>Pricing</strong>
+                    <span className="md-sub">Optional · for tracking medicine costs</span>
+                  </div>
+                  <div className="mf-price-row">
+                    <label className="pp-field">
+                      Price per tablet (₹)
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        inputMode="decimal"
+                        placeholder="e.g. 4.50"
+                        value={unitPrice}
+                        onChange={(e) => setUnitPrice(e.target.value)}
+                      />
+                    </label>
+                    <span className="mf-price-x" aria-hidden="true">×</span>
+                    <label className="pp-field">
+                      Tablets bought
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        inputMode="numeric"
+                        placeholder="e.g. 30"
+                        value={totalCount}
+                        onChange={(e) => setTotalCount(e.target.value)}
+                      />
+                    </label>
+                    <span className="mf-price-x" aria-hidden="true">=</span>
+                    <div className="mf-price-total">
+                      <span>Total</span>
+                      <strong>
+                        {unitPrice !== "" && totalCount !== "" && Number(unitPrice) >= 0 && Number(totalCount) >= 0
+                          ? formatPrice(Number(unitPrice) * Number(totalCount))
+                          : "—"}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pp-field mf-span">
+                  <span id="mf-times-label">Reminder times</span>
+                  <div className="ps-times" role="group" aria-labelledby="mf-times-label">
+                    {times.map((t, ti) => (
+                      <span key={ti} className="ps-time">
+                        <input
+                          type="time"
+                          value={t}
+                          aria-label={`Time ${ti + 1}`}
+                          onChange={(e) => setTimes(times.map((x, i) => (i === ti ? e.target.value : x)))}
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Remove time ${ti + 1}`}
+                          onClick={() => setTimes(times.filter((_, i) => i !== ti))}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      className="ps-add-time"
+                      onClick={() => setTimes([...times, "12:00"])}
+                    >
+                      + Add time
+                    </button>
+                  </div>
+                  {loadedTimes === null && (
+                    <span role="alert" className="pp-alert">
+                      Could not load the current reminder times, so they will be left unchanged on save.
+                    </span>
+                  )}
+                  <span className="md-sub">Optional · leave empty for a once-a-day medicine.</span>
+                </div>
+
+                {linkedScanId && (
+                  <p className="mf-span mf-linked">
+                    🧾 Added from a prescription scan.{" "}
+                    <Link to={`/family/${familyId}/prescription-scan?scan=${linkedScanId}&profile=${profileId}`}>
+                      View prescription
+                    </Link>
+                  </p>
+                )}
 
                 {isEdit && (
                   <label className="mf-toggle mf-span">

@@ -1,5 +1,7 @@
 """FastAPI application: registers the API routers and maps domain errors to HTTP status codes."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -12,15 +14,31 @@ from app.api import (
     families,
     medicines,
     notifications,
+    parent,
     prescription_scans,
     roles,
     settings,
     tasks,
 )
+from app.core.config import settings as app_settings
+from app.services import scheduler
 from app.services.errors import AuthError, NotFound
+from app.services.parent_context import ParentNotLinked
 from app.services.permissions import NotAMember, PermissionDenied
 
-app = FastAPI(title="CareCircle API")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Background jobs (missed-dose alerts, daily summaries); tests set SCHEDULER_ENABLED=false.
+    if app_settings.scheduler_enabled:
+        scheduler.start_scheduler()
+    try:
+        yield
+    finally:
+        scheduler.stop_scheduler()
+
+
+app = FastAPI(title="CareCircle API", lifespan=lifespan)
 
 # Local development frontend (Vite dev server).
 app.add_middleware(
@@ -46,6 +64,11 @@ def _permission_denied(_: Request, exc: PermissionDenied) -> JSONResponse:
 def _not_a_member(_: Request, exc: NotAMember) -> JSONResponse:
     # Non-members get 403 rather than 404 so family IDs cannot be probed.
     return JSONResponse(status_code=403, content={"detail": "You are not a member of this family"})
+
+
+@app.exception_handler(ParentNotLinked)
+def _parent_not_linked(_: Request, exc: ParentNotLinked) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": "Ask your family to link your profile"})
 
 
 @app.exception_handler(AuthError)
@@ -75,5 +98,6 @@ for _router in (
     notifications.router,
     activity.router,
     settings.router,
+    parent.router,
 ):
     app.include_router(_router)

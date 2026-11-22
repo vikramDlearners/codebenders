@@ -146,6 +146,9 @@ export interface MedicineUpdate {
   refill_date?: string | null;
   responsible_user_id?: string | null;
   active?: boolean | null;
+  // Pricing (edit only; the server computes total_price = unit_price x total_medicine_count).
+  unit_price?: number | string | null;
+  total_medicine_count?: number | null;
 }
 
 export interface QuantityUpdate {
@@ -161,6 +164,15 @@ export interface MedicineOut {
   refill_date: string | null;
   responsible_user_id: string | null;
   active: boolean;
+  /** Set when the medicine was confirmed from a prescription scan. */
+  prescription_scan_id?: string | null;
+  /** True when the medicine (or its linked prescription scan) has a photo. */
+  has_image?: boolean;
+  image_url?: string | null;
+  // Decimals arrive as JSON strings (e.g. "12.50").
+  unit_price?: string | number | null;
+  total_medicine_count?: number | null;
+  total_price?: string | number | null;
 }
 
 export interface TaskCreate {
@@ -375,7 +387,18 @@ export const careProfiles = {
 
 // ---- medicines (verified against api/medicines.py) ----
 
+export interface DoseToday {
+  medicine_id: string;
+  slot: string; // "HH:MM" or "any"
+  status: "taken" | "not_taken" | "skipped" | "missed" | null;
+  recorded_at: string | null;
+}
+
 export const medicines = {
+  dosesToday: (familyId: string, careProfileId: string) =>
+    get<DoseToday[]>(
+      `/api/families/${familyId}/medicines/doses/today?care_profile_id=${encodeURIComponent(careProfileId)}`,
+    ),
   list: (familyId: string) => get<MedicineOut[]>(`/api/families/${familyId}/medicines`),
   create: (familyId: string, body: MedicineCreate) =>
     post<MedicineOut>(`/api/families/${familyId}/medicines`, body),
@@ -387,6 +410,10 @@ export const medicines = {
     del(`/api/families/${familyId}/medicines/${medicineId}`),
   updateQuantity: (familyId: string, medicineId: string, body: QuantityUpdate) =>
     patch<MedicineOut>(`/api/families/${familyId}/medicines/${medicineId}/quantity`, body),
+  getReminders: (familyId: string, medicineId: string) =>
+    get<{ times: string[] }>(`/api/families/${familyId}/medicines/${medicineId}/reminders`),
+  setReminders: (familyId: string, medicineId: string, times: string[]) =>
+    put<{ times: string[] }>(`/api/families/${familyId}/medicines/${medicineId}/reminders`, { times }),
 };
 
 // ---- tasks (verified against api/tasks.py) ----

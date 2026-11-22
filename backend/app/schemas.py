@@ -4,6 +4,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
+from zoneinfo import available_timezones
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -97,11 +98,22 @@ class MyAccess(BaseModel):
     permissions: list[str]
 
 
+_TIMEZONES = frozenset(available_timezones())
+
+
+def _valid_timezone(value: str | None) -> str | None:
+    if value is not None and value not in _TIMEZONES:
+        raise ValueError("timezone must be a valid IANA time zone, e.g. Asia/Kolkata")
+    return value
+
+
 class CareProfileCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=255)
     greeting_name: str = Field(min_length=1, max_length=255)
     preferred_language: str = "en"
     timezone: str = "Asia/Kolkata"
+
+    _timezone = field_validator("timezone")(_valid_timezone)
 
 
 class CareProfileUpdate(BaseModel):
@@ -109,6 +121,8 @@ class CareProfileUpdate(BaseModel):
     greeting_name: str | None = None
     preferred_language: str | None = None
     timezone: str | None = None
+
+    _timezone = field_validator("timezone")(_valid_timezone)
 
 
 class CareProfileOut(BaseModel):
@@ -387,6 +401,13 @@ class ProfileOut(BaseModel):
 _HH_MM = re.compile(r"([01][0-9]|2[0-3]):[0-5][0-9]")
 
 
+def _validate_hh_mm_list(values: list[str]) -> list[str]:
+    for value in values:
+        if not _HH_MM.fullmatch(value):
+            raise ValueError(f"time must be 24-hour HH:MM: {value}")
+    return values
+
+
 class PrescriptionScanOut(BaseModel):
     id: str
     document_type: str
@@ -404,10 +425,20 @@ class PrescriptionMedicineIn(BaseModel):
     @field_validator("times")
     @classmethod
     def _times_are_hh_mm(cls, values: list[str]) -> list[str]:
-        for value in values:
-            if not _HH_MM.fullmatch(value):
-                raise ValueError(f"time must be 24-hour HH:MM: {value}")
-        return values
+        return _validate_hh_mm_list(values)
+
+
+class ReminderTimesIn(BaseModel):
+    times: list[str] = Field(default_factory=list, max_length=12)
+
+    @field_validator("times")
+    @classmethod
+    def _times_are_hh_mm(cls, values: list[str]) -> list[str]:
+        return _validate_hh_mm_list(values)
+
+
+class ReminderTimesOut(BaseModel):
+    times: list[str]
 
 
 class PrescriptionScanConfirm(BaseModel):
@@ -419,3 +450,55 @@ class PrescriptionScanConfirmOut(BaseModel):
     notified_user_ids: list[str]
 
 
+
+
+# ---------- parent check-in ----------
+
+class ChatMessageOut(BaseModel):
+    sender: Literal["bot", "parent"]
+    text: str
+    created_at: datetime
+
+
+class ReminderDueOut(BaseModel):
+    medicine_id: str
+    name: str
+    slot: str
+    remind_at: datetime
+
+
+class CheckinOut(BaseModel):
+    checkin_id: str
+    step: str
+    messages: list[ChatMessageOut]
+    call_number: str | None
+    # The family's phone for the Help button, whether or not anything urgent was reported.
+    help_number: str | None
+    language: str
+    reminders_due: list[ReminderDueOut]
+    # Speech for the bot messages this request stored (greeting / re-asked question), else null.
+    audio: str | None = None
+    audio_type: str | None = None
+
+
+class ParentTextIn(BaseModel):
+    text: str = Field(max_length=2000)
+
+
+class TurnMessageOut(BaseModel):
+    sender: Literal["bot", "parent"]
+    text: str
+
+
+class TurnOut(BaseModel):
+    messages: list[TurnMessageOut]
+    step: str
+    urgent: bool
+    call_number: str | None
+    help_number: str | None
+    audio: str | None
+    audio_type: str | None
+
+
+class VoiceTurnOut(TurnOut):
+    transcript: str
