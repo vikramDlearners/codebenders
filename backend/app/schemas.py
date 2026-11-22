@@ -18,7 +18,7 @@ class UserOut(BaseModel):
 
 
 class RoleIn(BaseModel):
-    role: Literal["parent", "caretaker", "hospital", "child_of_parent", "others"]
+    role: Literal["parent", "caretaker", "hospital", "manager", "others"]
     other_role: str | None = Field(default=None, max_length=120)
 
     @model_validator(mode="after")

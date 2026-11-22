@@ -24,7 +24,7 @@ const ROLE_LABELS: Record<string, string> = {
   parent: "Parent",
   caretaker: "Caretaker",
   hospital: "Hospital staff",
-  child_of_parent: "Child of a parent",
+  manager: "Manager",
   others: "Member",
 };
 

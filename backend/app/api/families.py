@@ -69,9 +69,9 @@ def add_member(
 def invite_parent(
     family_id: str, membership_id: str, db: Session = DbSession, user: User = CurrentUser
 ) -> dict:
-    # Emails a one-time sign-in link to the parent member and returns the address it was sent to.
-    email = svc.create_parent_invite(db, user.id, family_id, membership_id)
-    return {"email": email}
+    # Emails a one-time sign-in link to the parent member and returns the address it was sent to plus the link.
+    email, link = svc.create_parent_invite(db, user.id, family_id, membership_id)
+    return {"email": email, "invite_link": link}
 
 
 @router.patch("/{family_id}/members/{membership_id}", response_model=MemberOut)

@@ -196,8 +196,8 @@ def membership_permissions(db: Session, actor_id: str, family_id: str) -> dict:
     return {"role": role.name if role else "", "permissions": sorted(permission_codes_for(db, membership))}
 
 
-def create_parent_invite(db: Session, actor_id: str, family_id: str, membership_id: str) -> str:
-    """Create a one-time sign-in link for a parent member and email it to them. Returns the email address."""
+def create_parent_invite(db: Session, actor_id: str, family_id: str, membership_id: str) -> tuple[str, str]:
+    """Create a one-time sign-in link for a parent member and email it to them. Returns (email address, sign-in link)."""
     require(db, actor_id, family_id, "members.manage")
     membership = db.get(FamilyMember, membership_id)
     if membership is None or membership.family_id != family_id:
@@ -232,7 +232,7 @@ def create_parent_invite(db: Session, actor_id: str, family_id: str, membership_
         "You're invited to CareCircle",
         f"Open this link within {settings.parent_invite_hours} hours to create your sign-in: {link}",
     )
-    return user.email
+    return user.email, link
 
 
 __all__ = [

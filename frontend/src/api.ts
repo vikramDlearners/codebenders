@@ -53,6 +53,7 @@ export interface ParentInviteAccept {
 
 export interface InviteOut {
   detail: string;
+  invite_link?: string;
 }
 
 export interface SessionOut {
@@ -251,7 +252,7 @@ export interface VerifyOtpRequest {
   code: string;
 }
 
-export type RoleChoice = "parent" | "caretaker" | "hospital" | "child_of_parent" | "others";
+export type RoleChoice = "parent" | "caretaker" | "hospital" | "manager" | "others";
 
 export interface SetRoleRequest {
   role: RoleChoice;

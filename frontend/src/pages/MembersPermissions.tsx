@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { ApiError, members, roles } from "../api";
 import type { MemberOut, RoleOut } from "../api";
 
@@ -13,12 +13,13 @@ function messageOf(err: unknown): string {
   return "Something went wrong.";
 }
 
-function parseList(text: string): string[] {
-  return text
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
+const PERMISSION_OPTIONS: string[] = [
+  "dashboard.view", "parent_profile.view", "parent_profile.edit", "medicines.view", "medicines.edit",
+  "medicine_quantity.update", "reports.view", "reports.upload", "tasks.view", "tasks.create",
+  "tasks.assign", "tasks.update_own", "appointments.view", "appointments.create", "appointments.update",
+  "appointments.delete", "activity.view", "members.manage", "roles.manage", "notifications.configure",
+  "voice.use_parent_mode",
+];
 
 export default function MembersPermissions({ familyId }: MembersPermissionsProps) {
   const [memberList, setMemberList] = useState<MemberOut[]>([]);
@@ -35,10 +36,12 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
   const [inviteNotice, setInviteNotice] = useState<string | null>(null);
 
   const [roleName, setRoleName] = useState("");
-  const [rolePermissions, setRolePermissions] = useState("");
+  const [rolePermissions, setRolePermissions] = useState<string[]>([]);
   const [creatingRole, setCreatingRole] = useState(false);
 
-  const [permDrafts, setPermDrafts] = useState<Record<string, string>>({});
+  const [permDrafts, setPermDrafts] = useState<Record<string, string[]>>({});
+
+  const selectedValues = (e: ChangeEvent<HTMLSelectElement>) => Array.from(e.target.selectedOptions, (o) => o.value);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,10 +52,16 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
         if (cancelled) return;
         setMemberList(memberData);
         setRoleList(roleData);
-        setPermDrafts(Object.fromEntries(roleData.map((r) => [r.id, r.permissions.join(", ")])));
+        setPermDrafts(Object.fromEntries(roleData.map((r) => [r.id, r.permissions])));
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(messageOf(err));
+        if (!cancelled) {
+          setError(
+            err instanceof ApiError && err.status === 403
+              ? "You don't have access to manage members in this family. Ask the family manager to change your role."
+              : `Could not load members and roles: ${messageOf(err)}`,
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -114,12 +123,12 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
     try {
       const created = await roles.create(familyId, {
         name: roleName.trim(),
-        permissions: parseList(rolePermissions),
+        permissions: rolePermissions,
       });
       setRoleList((prev) => [...prev, created]);
-      setPermDrafts((prev) => ({ ...prev, [created.id]: created.permissions.join(", ") }));
+      setPermDrafts((prev) => ({ ...prev, [created.id]: created.permissions }));
       setRoleName("");
-      setRolePermissions("");
+      setRolePermissions([]);
     } catch (err: unknown) {
       setActionError(messageOf(err));
     } finally {
@@ -131,23 +140,23 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
     setActionError(null);
     try {
       const updated = await roles.updatePermissions(familyId, role.id, {
-        permissions: parseList(permDrafts[role.id] ?? ""),
+        permissions: permDrafts[role.id] ?? [],
       });
       setRoleList((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      setPermDrafts((prev) => ({ ...prev, [updated.id]: updated.permissions.join(", ") }));
+      setPermDrafts((prev) => ({ ...prev, [updated.id]: updated.permissions }));
     } catch (err: unknown) {
       setActionError(messageOf(err));
     }
   };
 
   if (loading) return <p role="status">Loading members and roles…</p>;
-  if (error) return <p role="alert">Could not load members and roles: {error}</p>;
+  if (error) return <p role="alert">{error}</p>;
 
   return (
-    <section aria-labelledby="members-permissions-heading">
-      <h2 id="members-permissions-heading">Family members &amp; permissions</h2>
+    <main className="parent-layout wizard-page" aria-labelledby="members-permissions-heading">
+      <h1 id="members-permissions-heading">Family members &amp; permissions</h1>
 
-      {actionError && <p role="alert">{actionError}</p>}
+      {actionError && <p role="alert" className="wizard-error">{actionError}</p>}
       {inviteNotice && <p role="status">{inviteNotice}</p>}
 
       <h3>Members</h3>
@@ -159,7 +168,7 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
             <li key={m.membership_id}>
               <strong>{m.display_name}</strong>
               {m.email ? ` (${m.email})` : ""}
-              <label>
+              <label className="wizard-field">
                 Role
                 <select
                   value={m.role_id}
@@ -175,6 +184,7 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
               {m.role_name.toLowerCase() === "parent" && (
                 <button
                   type="button"
+                  className="btn btn-secondary"
                   disabled={invitingId === m.membership_id}
                   onClick={() => void handleSendInvite(m.membership_id)}
                 >
@@ -186,16 +196,16 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
         </ul>
       )}
 
-      <form onSubmit={handleAddMember} aria-label="Add member">
-        <label>
+      <form className="wizard-form" onSubmit={handleAddMember} aria-label="Add member">
+        <label className="wizard-field">
           Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
-        <label>
+        <label className="wizard-field">
           Display name
           <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={255} />
         </label>
-        <label>
+        <label className="wizard-field">
           Role
           <select value={memberRoleId} onChange={(e) => setMemberRoleId(e.target.value)} required>
             <option value="">Select a role</option>
@@ -206,7 +216,7 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
             ))}
           </select>
         </label>
-        <button type="submit" disabled={addingMember || email.trim() === "" || memberRoleId === ""}>
+        <button type="submit" className="btn" disabled={addingMember || email.trim() === "" || memberRoleId === ""}>
           {addingMember ? "Adding…" : "Add member"}
         </button>
       </form>
@@ -220,14 +230,24 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
             <li key={r.id}>
               <strong>{r.name}</strong>
               {r.is_system ? " (system)" : ""}
-              <label>
-                Permissions (comma-separated)
-                <input
-                  value={permDrafts[r.id] ?? ""}
-                  onChange={(e) => setPermDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                />
+              <label className="wizard-field">
+                Permissions
+                <select
+                  multiple
+                  value={permDrafts[r.id] ?? []}
+                  onChange={(e) => {
+                    const vals = selectedValues(e);
+                    setPermDrafts((prev) => ({ ...prev, [r.id]: vals }));
+                  }}
+                >
+                  {PERMISSION_OPTIONS.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <button type="button" onClick={() => void handleSavePermissions(r)}>
+              <button type="button" className="btn btn-secondary" onClick={() => void handleSavePermissions(r)}>
                 Save permissions
               </button>
             </li>
@@ -235,19 +255,25 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
         </ul>
       )}
 
-      <form onSubmit={handleCreateRole} aria-label="Create role">
-        <label>
+      <form className="wizard-form" onSubmit={handleCreateRole} aria-label="Create role">
+        <label className="wizard-field">
           Role name
           <input value={roleName} onChange={(e) => setRoleName(e.target.value)} required maxLength={64} />
         </label>
-        <label>
-          Permissions (comma-separated)
-          <input value={rolePermissions} onChange={(e) => setRolePermissions(e.target.value)} />
+        <label className="wizard-field">
+          Permissions
+          <select multiple value={rolePermissions} onChange={(e) => setRolePermissions(selectedValues(e))}>
+            {PERMISSION_OPTIONS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
         </label>
-        <button type="submit" disabled={creatingRole || roleName.trim() === ""}>
+        <button type="submit" className="btn" disabled={creatingRole || roleName.trim() === ""}>
           {creatingRole ? "Creating…" : "Create role"}
         </button>
       </form>
-    </section>
+    </main>
   );
 }
