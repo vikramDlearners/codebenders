@@ -379,6 +379,8 @@ export const members = {
     patch<MemberOut>(`/api/families/${familyId}/members/${membershipId}`, body),
   invite: (familyId: string, membershipId: string) =>
     post<InviteOut>(`/api/families/${familyId}/members/${membershipId}/invite`),
+  remove: (familyId: string, membershipId: string) =>
+    del(`/api/families/${familyId}/members/${membershipId}`),
 };
 
 // ---- care profiles (verified against api/care_profiles.py) ----
@@ -632,3 +634,86 @@ export const appointments = {
     patch<AppointmentOut>(`/api/appointments/${appointmentId}`, body),
   remove: (appointmentId: string) => del(`/api/appointments/${appointmentId}`),
 };
+
+// ---- family dashboard (verified against api/dashboard.py and schemas.py) ----
+
+export interface DashboardParentOut {
+  care_profile_id: string;
+  display_name: string;
+  relationship: string | null;
+  age: number | null;
+  photo_url: string | null;
+  gender: string | null;
+  known_health_conditions: string | null;
+  primary_caregiver_name: string | null;
+  all_good: boolean;
+}
+
+export interface DashboardMedicinesTodayOut {
+  taken: number;
+  total: number;
+}
+
+export interface DashboardScheduleItemOut {
+  medicine_id: string;
+  medicine_name: string;
+  slot: string; // "HH:MM" or "any"
+  status: string | null;
+}
+
+export interface DashboardStockItemOut {
+  medicine_id: string;
+  display_name: string;
+  instructions_text: string | null;
+  purpose: string | null;
+  quantity_remaining: number | null;
+  days_left: number | null;
+  low: boolean;
+}
+
+export interface DashboardAppointmentOut {
+  id: string;
+  title: string;
+  doctor: string;
+  location: string | null;
+  scheduled_date: string; // YYYY-MM-DD
+  start_time: string; // HH:MM
+}
+
+export interface DashboardEmergencyOut {
+  active: boolean;
+  last_check_at: string | null;
+}
+
+export interface DashboardActivityOut {
+  id: string;
+  text: string;
+  created_at: string;
+}
+
+export interface DashboardResponse {
+  parents: DashboardParentOut[];
+  selected_care_profile_id: string | null;
+  on_date: string; // YYYY-MM-DD
+  daily_medicine_count: number;
+  medicines_today: DashboardMedicinesTodayOut;
+  today_schedule: DashboardScheduleItemOut[];
+  medicine_stock: DashboardStockItemOut[];
+  next_appointment: DashboardAppointmentOut | null;
+  emergency: DashboardEmergencyOut;
+  recent_activity: DashboardActivityOut[];
+}
+
+export interface DashboardParams {
+  care_profile_id?: string;
+  date?: string; // YYYY-MM-DD
+}
+
+export function getFamilyDashboard(familyId: string, params: DashboardParams = {}): Promise<DashboardResponse> {
+  const query = new URLSearchParams();
+  if (params.care_profile_id) query.set("care_profile_id", params.care_profile_id);
+  if (params.date) query.set("date", params.date);
+  const qs = query.toString();
+  return get<DashboardResponse>(`/api/families/${familyId}/dashboard${qs ? `?${qs}` : ""}`);
+}
+

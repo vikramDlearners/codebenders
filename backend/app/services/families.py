@@ -73,7 +73,11 @@ def list_members(db: Session, actor_id: str, family_id: str) -> list[tuple[Famil
         select(FamilyMember, User, Role)
         .join(User, User.id == FamilyMember.user_id)
         .join(Role, Role.id == FamilyMember.role_id)
-        .where(FamilyMember.family_id == family_id, FamilyMember.status == "active")
+        .where(
+            FamilyMember.family_id == family_id,
+            FamilyMember.status == "active",
+            FamilyMember.status != "removed",
+        )
         .order_by(User.display_name)
     )
     return [tuple(row) for row in db.execute(stmt).all()]
@@ -212,6 +216,25 @@ def change_member_role(
     return membership
 
 
+def remove_member(
+    db: Session, family_id: str, membership_id: str, acting_user_id: str
+) -> FamilyMember:
+    """Soft-delete a family member (status='removed'). The family creator and the caller cannot be removed."""
+    require(db, acting_user_id, family_id, "members.manage")
+    membership = db.get(FamilyMember, membership_id)
+    if membership is None or membership.family_id != family_id:
+        raise NotFound("Member not found")
+    family = db.get(Family, family_id)
+    if family is not None and membership.user_id == family.created_by_user_id:
+        raise ValueError("The family creator cannot be removed")
+    if membership.user_id == acting_user_id:
+        raise ValueError("You cannot remove yourself")
+    membership.status = "removed"
+    log_activity(db, family_id, acting_user_id, "member.removed", "member", membership.id)
+    db.commit()
+    return membership
+
+
 def membership_permissions(db: Session, actor_id: str, family_id: str) -> dict:
     """Return the caller's role name and permission codes (used by the UI to hide controls)."""
     membership = get_membership(db, actor_id, family_id)
@@ -270,5 +293,6 @@ __all__ = [
     "update_role_permissions",
     "add_member",
     "change_member_role",
+    "remove_member",
     "membership_permissions",
 ]

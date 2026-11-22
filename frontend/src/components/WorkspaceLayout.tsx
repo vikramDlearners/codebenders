@@ -18,6 +18,7 @@ export type WorkspacePage =
   | "records"
   | "timeline"
   | "members"
+  | "manage-profile"
   | "notifications";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -95,6 +96,7 @@ export default function WorkspaceLayout({ familyId, current, title, children }: 
   ];
   const settings: NavItem[] = [
     { key: "members", icon: "♙", label: "Family members", to: fam("/members") },
+    { key: "manage-profile", icon: "✎", label: "Manage Profile", to: fam("/manage-profile") },
     { key: "notifications", icon: "⚙", label: "Notification settings", to: fam("/notifications") },
   ];
 

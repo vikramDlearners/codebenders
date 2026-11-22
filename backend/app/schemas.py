@@ -143,6 +143,7 @@ class MedicineCreate(BaseModel):
     care_profile_id: str
     display_name: str = Field(min_length=1, max_length=255)
     instructions_text: str | None = None
+    purpose: str | None = Field(default=None, max_length=120)
     quantity_remaining: int | None = None
     refill_date: date | None = None
     responsible_user_id: str | None = None
@@ -151,6 +152,7 @@ class MedicineCreate(BaseModel):
 class MedicineUpdate(BaseModel):
     display_name: str | None = None
     instructions_text: str | None = None
+    purpose: str | None = Field(default=None, max_length=120)
     refill_date: date | None = None
     responsible_user_id: str | None = None
     active: bool | None = None
@@ -167,6 +169,7 @@ class MedicineOut(BaseModel):
     care_profile_id: str
     display_name: str
     instructions_text: str | None
+    purpose: str | None = None
     quantity_remaining: int | None
     refill_date: date | None
     responsible_user_id: str | None
@@ -258,6 +261,7 @@ class AppointmentCreate(BaseModel):
     start_time: str = Field(min_length=1, max_length=8)
     provider: str = Field(min_length=1, max_length=255)
     reason: str = Field(min_length=1, max_length=255)
+    location: str | None = Field(default=None, max_length=255)
     notes: str = ""
 
 
@@ -267,6 +271,7 @@ class AppointmentUpdate(BaseModel):
     start_time: str | None = Field(default=None, min_length=1, max_length=8)
     provider: str | None = Field(default=None, min_length=1, max_length=255)
     reason: str | None = Field(default=None, min_length=1, max_length=255)
+    location: str | None = Field(default=None, max_length=255)
     notes: str | None = None
     status: AppointmentStatusIn | None = None
 
@@ -278,6 +283,7 @@ class AppointmentOut(BaseModel):
     start_time: str
     provider: str
     reason: str
+    location: str | None = None
     notes: str
     status: AppointmentStatusIn
 
@@ -514,3 +520,73 @@ class TurnOut(BaseModel):
 
 class VoiceTurnOut(TurnOut):
     transcript: str
+
+
+# ---------- family dashboard ----------
+
+class DashboardParentOut(BaseModel):
+    care_profile_id: str
+    display_name: str
+    relationship: str | None
+    age: int | None
+    photo_url: str | None
+    known_health_conditions: str | None
+    primary_caregiver_name: str | None
+    gender: str | None = None
+    all_good: bool
+
+
+class DashboardMedicinesTodayOut(BaseModel):
+    taken: int
+    total: int
+
+
+class DashboardScheduleItemOut(BaseModel):
+    medicine_id: str
+    medicine_name: str
+    slot: str
+    status: str | None
+
+
+class DashboardStockItemOut(BaseModel):
+    medicine_id: str
+    display_name: str
+    instructions_text: str | None
+    purpose: str | None
+    quantity_remaining: int | None
+    days_left: float | None
+    low: bool
+
+
+class DashboardAppointmentOut(BaseModel):
+    id: str
+    title: str
+    doctor: str
+    location: str | None
+    scheduled_date: date
+    start_time: str
+
+
+class DashboardEmergencyOut(BaseModel):
+    active: bool
+    last_check_at: datetime | None
+
+
+class DashboardActivityOut(BaseModel):
+    id: str
+    text: str
+    created_at: datetime
+
+
+class DashboardResponse(BaseModel):
+    parents: list[DashboardParentOut]
+    selected_care_profile_id: str | None
+    on_date: date
+    daily_medicine_count: int
+    medicines_today: DashboardMedicinesTodayOut
+    today_schedule: list[DashboardScheduleItemOut]
+    medicine_stock: list[DashboardStockItemOut]
+    next_appointment: DashboardAppointmentOut | None
+    emergency: DashboardEmergencyOut
+    recent_activity: list[DashboardActivityOut]
+
