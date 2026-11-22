@@ -24,6 +24,7 @@ def _member_out(row) -> MemberOut:
         email=user.email,
         role_id=role.id,
         role_name=role.name,
+        relationship=membership.relationship,
     )
 
 
@@ -59,7 +60,10 @@ def list_members(family_id: str, db: Session = DbSession, user: User = CurrentUs
 def add_member(
     family_id: str, body: MemberCreate, db: Session = DbSession, user: User = CurrentUser
 ) -> MemberOut:
-    membership = svc.add_member(db, user.id, family_id, body.email, body.role_id, body.display_name)
+    membership = svc.add_member(
+        db, user.id, family_id, body.email, body.role_id, body.display_name,
+        relationship=body.relationship,
+    )
     rows = svc.list_members(db, user.id, family_id)
     row = next(r for r in rows if r[0].id == membership.id)
     return _member_out(row)

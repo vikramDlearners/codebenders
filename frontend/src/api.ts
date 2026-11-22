@@ -77,12 +77,14 @@ export interface MemberOut {
   email: string | null;
   role_id: string;
   role_name: string;
+  relationship: string | null;
 }
 
 export interface MemberCreate {
   email: string;
   display_name?: string | null;
   role_id: string;
+  relationship?: string | null;
 }
 
 export interface MemberRoleChange {
@@ -218,6 +220,13 @@ export interface NotificationOut {
   payload: Record<string, unknown> | null;
   status: string;
   created_at: string;
+}
+
+export interface NotificationSummaryOut {
+  summary: string | null;
+  count: number;
+  days: number;
+  error: string | null;
 }
 
 export interface ActivityOut {
@@ -465,6 +474,7 @@ export const intentMode = {
 
 export const notifications = {
   list: () => get<NotificationOut[]>("/api/notifications"),
+  summary: () => get<NotificationSummaryOut>("/api/notifications/summary"),
   markRead: (notificationId: string) =>
     post<NotificationOut>(`/api/notifications/${notificationId}/read`),
 };

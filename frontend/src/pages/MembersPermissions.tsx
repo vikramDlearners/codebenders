@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { ApiError, members, roles } from "../api";
 import type { MemberOut, RoleOut } from "../api";
+import { RELATIONSHIP_OPTIONS } from "../lib/constants";
 
 interface MembersPermissionsProps {
   familyId: string;
@@ -31,6 +32,7 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [memberRoleId, setMemberRoleId] = useState("");
+  const [relationship, setRelationship] = useState("");
   const [addingMember, setAddingMember] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [inviteNotice, setInviteNotice] = useState<string | null>(null);
@@ -80,11 +82,13 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
         email: email.trim(),
         display_name: displayName.trim() || null,
         role_id: memberRoleId,
+        relationship: relationship ? relationship.toLowerCase() : null,
       });
       setMemberList((prev) => [...prev, created]);
       setEmail("");
       setDisplayName("");
       setMemberRoleId("");
+      setRelationship("");
     } catch (err: unknown) {
       setActionError(messageOf(err));
     } finally {
@@ -181,6 +185,14 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
                   ))}
                 </select>
               </label>
+              {m.relationship && (
+                <span className="muted">
+                  {m.relationship.charAt(0).toUpperCase() + m.relationship.slice(1)}
+                </span>
+              )}
+              {(m.relationship === "mother" || m.relationship === "father") && (
+                <span className="muted"> {m.relationship === "mother" ? "Mother profile" : "Father profile"}</span>
+              )}
               {m.role_name.toLowerCase() === "parent" && (
                 <button
                   type="button"
@@ -216,6 +228,17 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
             ))}
           </select>
         </label>
+        <label className="wizard-field">
+          Relationship (optional)
+          <select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
+            <option value="">Not specified</option>
+            {RELATIONSHIP_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="submit" className="btn" disabled={addingMember || email.trim() === "" || memberRoleId === ""}>
           {addingMember ? "Adding…" : "Add member"}
         </button>
@@ -230,23 +253,29 @@ export default function MembersPermissions({ familyId }: MembersPermissionsProps
             <li key={r.id}>
               <strong>{r.name}</strong>
               {r.is_system ? " (system)" : ""}
-              <label className="wizard-field">
-                Permissions
-                <select
-                  multiple
-                  value={permDrafts[r.id] ?? []}
-                  onChange={(e) => {
-                    const vals = selectedValues(e);
-                    setPermDrafts((prev) => ({ ...prev, [r.id]: vals }));
-                  }}
-                >
-                  {PERMISSION_OPTIONS.map((p) => (
-                    <option key={p} value={p}>
+              <fieldset className="wizard-field">
+                <legend>Permissions</legend>
+                {PERMISSION_OPTIONS.map((p) => {
+                  const selected = permDrafts[r.id] ?? [];
+                  return (
+                    <label key={p}>
+                      <input
+                        type="checkbox"
+                        id={`perm-${r.id}-${p}`}
+                        checked={selected.includes(p)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...selected, p]
+                            : selected.filter((v) => v !== p);
+                          setPermDrafts((prev) => ({ ...prev, [r.id]: next }));
+                        }}
+                      />
                       {p}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                    </label>
+                  );
+                })}
+              </fieldset>
+
               <button type="button" className="btn btn-secondary" onClick={() => void handleSavePermissions(r)}>
                 Save permissions
               </button>

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.care_profile import CareProfile
 from app.models.family import Family
 from app.models.membership import FamilyMember
 from app.models.parent_invite import ParentInvite
@@ -145,10 +146,20 @@ def add_member(
     email: str,
     role_id: str,
     display_name: str | None = None,
+    relationship: str | None = None,
 ) -> FamilyMember:
-    """Add a person to the family. Creates the user record if the email is new."""
+    """Add a person to the family. Creates the user record if the email is new.
+
+    A mother or father member also gets a linked Mother/Father care profile.
+    """
     require(db, actor_id, family_id, "members.manage")
     role = _role_in_family(db, family_id, role_id)
+    if relationship is not None:
+        relationship = relationship.strip().lower() or None
+        if relationship is not None and relationship not in {
+            "mother", "father", "grandmother", "grandfather", "other",
+        }:
+            raise ValueError("Unknown relationship")
     email = email.strip().lower()
     user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
     if user is None:
@@ -164,8 +175,20 @@ def add_member(
     ).scalar_one_or_none()
     if existing is not None:
         raise ValueError("This person is already a member; one role per member per family")
-    membership = FamilyMember(family_id=family_id, user_id=user.id, role_id=role.id)
+    membership = FamilyMember(
+        family_id=family_id, user_id=user.id, role_id=role.id, relationship=relationship
+    )
     db.add(membership)
+    db.flush()
+    if relationship in ("mother", "father"):
+        db.add(
+            CareProfile(
+                family_id=family_id,
+                display_name=user.display_name,
+                greeting_name=user.display_name,
+                linked_member_id=membership.id,
+            )
+        )
     log_activity(
         db, family_id, actor_id, "member.added", "member", membership.id, {"role": role.name}
     )

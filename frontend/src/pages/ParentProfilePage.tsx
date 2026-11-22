@@ -11,11 +11,13 @@ import {
   type MemberOut,
   type ParentProfileOut,
 } from "../api";
+import { RELATIONSHIP_OPTIONS } from "../lib/constants";
+
 
 // Parent profile page in the shared family workspace layout (sidebar + header).
 // Reads and saves the signed-in user's parent onboarding profile.
 
-const RELATIONSHIP_OPTIONS = ["Mother", "Father", "Grandmother", "Grandfather", "Other"];
+
 const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
   { value: "English", label: "English" },
   { value: "Tamil", label: "Tamil · தமிழ்" },

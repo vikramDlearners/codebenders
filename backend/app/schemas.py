@@ -65,12 +65,18 @@ class MemberOut(BaseModel):
     email: str | None
     role_id: str
     role_name: str
+    relationship: str | None = None
+
+
+RelationshipIn = Literal["mother", "father", "grandmother", "grandfather", "other"]
+
 
 
 class MemberCreate(BaseModel):
     email: EmailStr
     display_name: str | None = Field(default=None, max_length=255)
     role_id: str
+    relationship: RelationshipIn | None = None
 
 
 class MemberRoleChange(BaseModel):
@@ -210,6 +216,13 @@ class NotificationOut(BaseModel):
     created_at: datetime
 
 
+class NotificationSummaryOut(BaseModel):
+    summary: str | None = None
+    count: int
+    days: int
+    error: str | None = None
+
+
 class ActivityOut(BaseModel):
     id: str
     actor_id: str | None
@@ -288,7 +301,6 @@ class VerifyOtpRequest(BaseModel):
     code: str = Field(min_length=6, max_length=6)
 
 
-RelationshipIn = Literal["mother", "father", "grandmother", "grandfather", "other"]
 LanguageIn = Literal["English", "Tamil", "Hindi", "Telugu", "Malayalam", "Kannada"]
 SectionIn = Literal["parent", "communication", "care", "medical", "additional"]
 

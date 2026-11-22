@@ -10,6 +10,7 @@ import {
   type MedicineOut,
   type MyAccess,
   type NotificationOut,
+  type NotificationSummaryOut,
   type TaskOut,
 } from "../api";
 
@@ -29,6 +30,8 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<NotificationSummaryOut | null>(null);
+  const [summaryFailed, setSummaryFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +39,14 @@ export default function Dashboard() {
     async function load() {
       setLoading(true);
       setError(null);
+      void notifications
+        .summary()
+        .then((s) => {
+          if (!cancelled) setSummary(s);
+        })
+        .catch(() => {
+          if (!cancelled) setSummaryFailed(true);
+        });
       try {
         const list = await families.list();
         const family = list[0];
@@ -75,6 +86,14 @@ export default function Dashboard() {
     <main>
       <h1>{data.family.name}</h1>
       <p>Your role: {data.access.role}</p>
+
+      <section>
+        <h2>Last 7 days</h2>
+        {summary === null && !summaryFailed && <p role="status">Loading summary…</p>}
+        {summaryFailed && <p>Could not load the 7-day summary.</p>}
+        {summary?.error && <p role="alert">{summary.error}</p>}
+        {summary?.summary && <p>{summary.summary}</p>}
+      </section>
 
       <section>
         <h2>Medicines ({data.medicines.length})</h2>
