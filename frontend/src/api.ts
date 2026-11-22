@@ -765,3 +765,101 @@ export function getFamilyDashboard(familyId: string, params: DashboardParams = {
   return get<DashboardResponse>(`/api/families/${familyId}/dashboard${qs ? `?${qs}` : ""}`);
 }
 
+// Monthly parent report: GET /api/families/{familyId}/report (mirrors backend ReportResponse).
+export interface ReportProfileOut {
+  display_name: string;
+  age: number | null;
+  relationship: string | null;
+  primary_caregiver_name: string | null;
+  preferred_language: string;
+  health_details: string | null;
+  primary_doctor: string | null;
+}
+
+export interface ReportPeriodOut {
+  month: string; // YYYY-MM
+  start: string; // YYYY-MM-DD
+  end: string; // YYYY-MM-DD
+  days_elapsed: number;
+}
+
+export interface ReportSummaryOut {
+  medicine_checkins_recorded_pct: number | null;
+  diet_days_recorded_pct: number | null;
+  health_entries: number;
+  followups_to_review: number;
+}
+
+export interface ReportMedicineOut {
+  medicine_id: string;
+  display_name: string;
+  schedule: string[];
+  scheduled: number | null;
+  taken: number;
+  recorded: number;
+  missed: number;
+  stock_days_left: number | null;
+  low_stock: boolean;
+}
+
+export interface ReportMealOut {
+  meal: string;
+  days_logged: number;
+}
+
+export interface ReportDietOut {
+  meals: ReportMealOut[];
+  water_days: number;
+  fruit_days: number;
+  days_with_entries: number;
+}
+
+export interface ReportHealthEntryOut {
+  day: string; // YYYY-MM-DD
+  text: string;
+  urgent: boolean;
+}
+
+export interface ReportAppointmentOut {
+  id: string;
+  scheduled_date: string; // YYYY-MM-DD
+  start_time: string;
+  reason: string;
+  provider: string;
+  location: string | null;
+  status: string;
+  notes: string;
+}
+
+export interface ReportChecklistOut {
+  low_stock: string[];
+  unconfirmed_checkins: number;
+  upcoming_appointments: ReportAppointmentOut[];
+}
+
+export interface ReportResponse {
+  profile: ReportProfileOut;
+  period: ReportPeriodOut;
+  summary: ReportSummaryOut;
+  medicines: ReportMedicineOut[];
+  diet: ReportDietOut;
+  health_entries: ReportHealthEntryOut[];
+  appointment_notes: ReportAppointmentOut[];
+  checklist: ReportChecklistOut;
+  disclaimer: string;
+}
+
+export interface ReportParams {
+  care_profile_id?: string;
+  month?: string; // YYYY-MM
+}
+
+export function getFamilyReport(familyId: string, params: ReportParams = {}): Promise<ReportResponse> {
+  const query = new URLSearchParams();
+  if (params.care_profile_id) query.set("care_profile_id", params.care_profile_id);
+  if (params.month) query.set("month", params.month);
+  const qs = query.toString();
+  return get<ReportResponse>(`/api/families/${familyId}/report${qs ? `?${qs}` : ""}`);
+}
+
+

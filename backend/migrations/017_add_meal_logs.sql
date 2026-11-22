@@ -24,3 +24,4 @@ CREATE INDEX ix_meal_logs_profile_date ON meal_logs (care_profile_id, log_date);
 UPDATE alembic_version SET version_num='7b8c9d0e1f28' WHERE alembic_version.version_num = '6a7b8c9d0e16';
 
 COMMIT;
+                                                                

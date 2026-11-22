@@ -627,3 +627,89 @@ class DashboardResponse(BaseModel):
     emergency: DashboardEmergencyOut
     recent_activity: list[DashboardActivityOut]
 
+
+# ---------- monthly parent report ----------
+
+class ReportProfileOut(BaseModel):
+    display_name: str
+    age: int | None
+    relationship: str | None
+    primary_caregiver_name: str | None
+    preferred_language: str
+    health_details: str | None
+    primary_doctor: str | None
+
+
+class ReportPeriodOut(BaseModel):
+    month: str  # YYYY-MM
+    start: date
+    end: date
+    days_elapsed: int
+
+
+class ReportSummaryOut(BaseModel):
+    medicine_checkins_recorded_pct: int | None
+    diet_days_recorded_pct: int | None
+    health_entries: int
+    followups_to_review: int
+
+
+class ReportMedicineOut(BaseModel):
+    medicine_id: str
+    display_name: str
+    schedule: list[str]
+    scheduled: int | None
+    taken: int
+    recorded: int
+    missed: int
+    stock_days_left: float | None
+    low_stock: bool
+
+
+class ReportMealOut(BaseModel):
+    meal: str
+    days_logged: int
+
+
+class ReportDietOut(BaseModel):
+    meals: list[ReportMealOut]
+    water_days: int
+    fruit_days: int
+    days_with_entries: int
+
+
+class ReportHealthEntryOut(BaseModel):
+    day: date
+    text: str
+    urgent: bool
+
+
+class ReportAppointmentOut(BaseModel):
+    id: str
+    scheduled_date: date
+    start_time: str
+    reason: str
+    provider: str
+    location: str | None
+    status: str
+    notes: str
+
+
+class ReportChecklistOut(BaseModel):
+    low_stock: list[str]
+    unconfirmed_checkins: int
+    upcoming_appointments: list[ReportAppointmentOut]
+
+
+class ReportResponse(BaseModel):
+    profile: ReportProfileOut
+    period: ReportPeriodOut
+    summary: ReportSummaryOut
+    medicines: list[ReportMedicineOut]
+    diet: ReportDietOut
+    health_entries: list[ReportHealthEntryOut]
+    appointment_notes: list[ReportAppointmentOut]
+    checklist: ReportChecklistOut
+    disclaimer: str
+
+

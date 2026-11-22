@@ -6,9 +6,11 @@ import {
   ApiError,
   auth,
   getFamilyDashboard,
+  getFamilyReport,
   type DashboardParentOut,
   type DashboardResponse,
   type DashboardStockItemOut,
+  type ReportResponse,
   tasks,
   type TaskOut,
 } from "../api";
@@ -52,6 +54,127 @@ function errorText(err: unknown): string {
   return err instanceof ApiError ? err.detail : "Could not load the dashboard.";
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+const REPORT_CSS = `
+body{font-family:Arial,Helvetica,sans-serif;color:#1f2d2b;margin:32px;font-size:13px;}
+h1{color:#0f7b6c;margin:0;font-size:26px;text-align:center;}
+.sub{text-align:center;color:#5b6b68;margin:4px 0 16px;letter-spacing:.05em;}
+h2{font-size:18px;margin:24px 0 6px;}
+p.lead{color:#3b4a47;margin:4px 0 8px;}
+table{border-collapse:collapse;width:100%;margin:6px 0;}
+th,td{border:1px solid #d7e3e0;padding:6px 8px;text-align:left;vertical-align:top;}
+thead th{background:#0f7b6c;color:#fff;}
+table.profile th{background:#f2f8f7;color:#1f2d2b;width:18%;}
+.stats{display:flex;gap:0;margin:12px 0;border:1px solid #cfe6e1;background:#e8f5f2;}
+.stats div{flex:1;text-align:center;padding:10px;border-left:1px solid #cfe6e1;}
+.stats div:first-child{border-left:none;}
+.stats strong{display:block;font-size:20px;color:#0f7b6c;}
+.muted{color:#6b7a77;}
+.disclaimer{margin-top:28px;border-top:1px solid #d7e3e0;padding-top:10px;color:#5b6b68;font-size:11px;}
+`;
+
+function buildReportHtml(r: ReportResponse): string {
+  const e = escapeHtml;
+  const p = r.profile;
+  const pct = (v: number | null) => (v === null ? "—" : `${v}%`);
+  const emptyRow = (cols: number) => `<tr><td colspan="${cols}" class="muted">No entries recorded</td></tr>`;
+  const table = (headers: string[], rows: string) =>
+    `<table><thead><tr>${headers.map((h) => `<th>${e(h)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
+
+  const medicineRows = r.medicines
+    .map((m) => {
+      const stock =
+        m.stock_days_left === null ? (m.low_stock ? "Low" : "—") : `${Math.round(m.stock_days_left)} days left`;
+      return `<tr><td>${e(m.display_name)}</td><td>${e(m.schedule.join(", ") || "—")}</td><td>${e(
+        `${m.taken} / ${m.scheduled ?? "—"} recorded taken`,
+      )}</td><td>${e(stock)}${m.low_stock ? " (low stock)" : ""}</td></tr>`;
+    })
+    .join("");
+
+  const dietRows =
+    r.diet.meals.map((m) => `<tr><td>${e(m.meal)}</td><td>${e(`${m.days_logged} days logged`)}</td></tr>`).join("") +
+    `<tr><td>Water intake</td><td>${e(`${r.diet.water_days} days logged`)}</td></tr>` +
+    `<tr><td>Fruit / vegetables</td><td>${e(`${r.diet.fruit_days} days logged`)}</td></tr>`;
+
+  const healthRows = r.health_entries
+    .map((h) => `<tr><td>${e(h.day)}</td><td>${e(h.text)}</td><td>${h.urgent ? "Urgent" : ""}</td></tr>`)
+    .join("");
+
+  const checklistItems: string[] = [
+    ...r.checklist.low_stock.map((name) => `Review refill timing for low-stock medicine: ${name}`),
+    ...(r.checklist.unconfirmed_checkins > 0
+      ? [`Check with parent/caregiver about ${r.checklist.unconfirmed_checkins} unconfirmed check-in(s)`]
+      : []),
+    ...r.checklist.upcoming_appointments.map(
+      (a) =>
+        `Appointment ${a.scheduled_date} ${a.start_time}: ${a.reason} with ${a.provider}${
+          a.location ? ` at ${a.location}` : ""
+        } (${a.status})`,
+    ),
+  ];
+  const checklistHtml = checklistItems.length
+    ? `<ul>${checklistItems.map((item) => `<li>${e(item)}</li>`).join("")}</ul>`
+    : `<p class="muted">No entries recorded</p>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CareCircle monthly parent report ${e(r.period.month)}</title>
+<style>${REPORT_CSS}</style>
+</head>
+<body>
+<h1>CareCircle</h1>
+<p class="sub">MONTHLY PARENT HEALTH REPORT</p>
+<table class="profile"><tbody>
+<tr><th>Parent name</th><td>${e(p.display_name)}</td><th>Report period</th><td>${e(r.period.start)} – ${e(r.period.end)}</td></tr>
+<tr><th>Age</th><td>${p.age === null ? "Not set" : e(`${p.age} years`)}</td><th>Relationship</th><td>${e(p.relationship ?? "Not set")}</td></tr>
+<tr><th>Primary caregiver</th><td>${e(p.primary_caregiver_name ?? "Not set")}</td><th>Language</th><td>${e(p.preferred_language)}</td></tr>
+<tr><th>Health details on file</th><td>${e(p.health_details ?? "None recorded")}</td><th>Primary doctor</th><td>${e(p.primary_doctor ?? "Not set")}</td></tr>
+</tbody></table>
+<div class="stats">
+<div><strong>${e(pct(r.summary.medicine_checkins_recorded_pct))}</strong>Medicine check-ins recorded</div>
+<div><strong>${e(pct(r.summary.diet_days_recorded_pct))}</strong>Diet log days recorded</div>
+<div><strong>${e(r.summary.health_entries)}</strong>Health entries logged</div>
+<div><strong>${e(r.summary.followups_to_review)}</strong>Follow-up notes to review</div>
+</div>
+<h2>1. Medicine report</h2>
+${r.medicines.length ? table(["Medicine", "Schedule", "Check-in summary", "Stock note"], medicineRows) : `<p class="muted">No entries recorded</p>`}
+<h2>2. Diet report</h2>
+${table(["Diet item", "Monthly log summary"], dietRows || emptyRow(2))}
+<p class="lead">Diet log coverage: entries recorded on ${e(r.diet.days_with_entries)} day(s) this month. This section reflects family-entered logs, not a nutrition assessment.</p>
+<h2>3. Health report</h2>
+${r.health_entries.length ? table(["Date", "Entry", "Urgent"], healthRows) : `<p class="muted">No entries recorded</p>`}
+<h2>4. Family follow-up checklist</h2>
+${checklistHtml}
+<div class="disclaimer">
+<p>${e(r.disclaimer)}</p>
+<p>Family-entered records only. Not medical advice or a clinical assessment.</p>
+</div>
+</body>
+</html>`;
+}
+
+function downloadReportHtml(filename: string, html: string): void {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 type Tone = "red" | "amber" | "green";
 
 function stockTone(item: DashboardStockItemOut): Tone {
@@ -92,6 +215,7 @@ export default function Dashboard() {
   const [userName, setUserName] = useState<string | null>(null);
   const [familyTasks, setFamilyTasks] = useState<TaskOut[]>([]);
   const [tasksError, setTasksError] = useState<string | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -142,6 +266,22 @@ export default function Dashboard() {
   }, [familyId]);
 
   const greeting = `Good Evening, ${userName ?? "there"}`;
+
+  async function handleDownloadReport() {
+    setReportBusy(true);
+    try {
+      const params: { care_profile_id?: string; month?: string } = {};
+      if (selectedId) params.care_profile_id = selectedId;
+      const month = data?.on_date.slice(0, 7);
+      if (month) params.month = month;
+      const report = await getFamilyReport(familyId, params);
+      downloadReportHtml(`carecircle-report-${report.period.month}.html`, buildReportHtml(report));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Could not download the report.");
+    } finally {
+      setReportBusy(false);
+    }
+  }
 
   let content: ReactNode;
   if (!data) {
@@ -376,6 +516,9 @@ export default function Dashboard() {
             <h1>{greeting}</h1>
             <p className="pp-muted">Here's your family care summary for today.</p>
           </div>
+          <button type="button" className="pp-btn" onClick={handleDownloadReport} disabled={reportBusy}>
+            {reportBusy ? "Preparing…" : "Download report"}
+          </button>
         </div>
         {content}
       </div>

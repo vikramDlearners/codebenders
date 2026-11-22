@@ -23,10 +23,12 @@ from app.schemas import (
     MyAccess,
     ProfileIn,
     ProfileOut,
+    ReportResponse,
 )
 from app.services import care as care_svc
 from app.services import families as svc
 from app.services.dashboard import build_family_dashboard
+from app.services.report import build_family_report
 from app.services.permissions import get_membership, permission_codes_for
 from app.services.permissions import require  # noqa: F401  (re-exported for readers of this module)
 
@@ -132,6 +134,27 @@ def family_dashboard(
         except ValueError:
             raise HTTPException(status_code=422, detail="date must be an ISO date (YYYY-MM-DD)")
     return DashboardResponse(**build_family_dashboard(db, family_id, care_profile_id, on_date))
+
+
+@router.get("/{family_id}/report", response_model=ReportResponse)
+def family_report(
+    family_id: str,
+    care_profile_id: str | None = None,
+    month: str | None = None,
+    db: Session = DbSession,
+    user: User = CurrentUser,
+) -> ReportResponse:
+    # month is YYYY-MM; the report covers that whole calendar month (default: the current month).
+    require(db, user.id, family_id, "dashboard.view")
+    month_start = None
+    if month is not None:
+        try:
+            month_start = datetime.strptime(month, "%Y-%m").date()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+    return ReportResponse(**build_family_report(db, family_id, care_profile_id, month_start))
+
+
 
 
 def _parent_in_family(db: Session, family_id: str, care_profile_id: str) -> CareProfile:

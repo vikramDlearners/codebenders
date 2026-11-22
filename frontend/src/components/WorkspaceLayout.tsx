@@ -88,7 +88,6 @@ export default function WorkspaceLayout({ familyId, current, title, children }: 
     { key: "overview", icon: "⌂", label: "Overview", to: fam("") },
     { key: "parent-profile", icon: "♡", label: "Parent profile", to: "/parent-profile" },
     { key: "medicines", icon: "▤", label: "Medicines", to: fam("/medicines") },
-    { key: "activity", icon: "◉", label: "CareVoice activity", to: fam("/activity") },
     { key: "tasks", icon: "☷", label: "Tasks", to: fam("/tasks") },
     { key: "appointments", icon: "▦", label: "Appointments", to: fam("/appointments") },
     { key: "records", icon: "▧", label: "Records", to: fam("/records") },
@@ -96,7 +95,6 @@ export default function WorkspaceLayout({ familyId, current, title, children }: 
   const settings: NavItem[] = [
     { key: "members", icon: "♙", label: "Family members", to: fam("/members") },
     { key: "manage-profile", icon: "✎", label: "Manage Profile", to: fam("/manage-profile") },
-    { key: "notifications", icon: "⚙", label: "Notification settings", to: fam("/notifications") },
   ];
 
   const renderNav = (items: NavItem[]) =>
@@ -128,7 +126,7 @@ export default function WorkspaceLayout({ familyId, current, title, children }: 
       <div className="ws-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />
       <aside className="pp-sidebar" id="ws-sidebar" aria-label="Sidebar">
         <div className="pp-brand">
-          <span className="pp-brand-mark" aria-hidden="true">✳</span>
+          <img src="/logo.png" alt="" aria-hidden="true" className="pp-brand-mark pp-brand-logo" />
           <div>
             <div className="pp-brand-name">CareCircle</div>
             <div className="pp-brand-tag">Family care, together</div>

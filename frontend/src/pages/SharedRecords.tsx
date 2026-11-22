@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import "../medicines.css";
 import WorkspaceLayout from "../components/WorkspaceLayout";
 import {
+  careProfiles,
   families,
-  getProfile,
   medicines,
+  type CareProfileOut,
   type ConversationSummaryOut,
 } from "../api";
 
@@ -14,6 +15,7 @@ import {
 interface MedicineRow {
   id: string;
   name: string;
+  careProfileId: string | null;
   times: string[];
   notes: string | null; // MedicineOut has no separate notes field; instructions_text is used.
   lastTaken: string | null;
@@ -42,7 +44,7 @@ function downloadCsv(filename: string, csv: string): void {
 export default function SharedRecords({ familyId }: { familyId: string }) {
   const [summaries, setSummaries] = useState<ConversationSummaryOut[]>([]);
   const [medicineRows, setMedicineRows] = useState<MedicineRow[]>([]);
-  const [parentName, setParentName] = useState("");
+  const [profileNames, setProfileNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -52,13 +54,12 @@ export default function SharedRecords({ familyId }: { familyId: string }) {
     setLoadError(null);
     (async () => {
       try {
-        const [summaryList, medicineList, lastTakenList, profile] = await Promise.all([
+        const [summaryList, medicineList, lastTakenList, profileList] = await Promise.all([
           families.conversationSummaries(familyId),
           medicines.list(familyId),
           medicines.lastTaken(familyId),
-          getProfile().catch(() => null),
+          careProfiles.list(familyId).catch(() => [] as CareProfileOut[]),
         ]);
-        const name = profile?.parent_full_name ?? "";
         const lastTakenById = new Map(
           lastTakenList.map((l) => [l.medicine_id, l.last_taken_at]),
         );
@@ -68,6 +69,7 @@ export default function SharedRecords({ familyId }: { familyId: string }) {
             return {
               id: m.id,
               name: m.display_name,
+              careProfileId: m.care_profile_id,
               times: reminders.times,
               notes: m.instructions_text,
               lastTaken: lastTakenById.get(m.id) ?? null,
@@ -81,7 +83,7 @@ export default function SharedRecords({ familyId }: { familyId: string }) {
         );
         setSummaries(sorted);
         setMedicineRows(rows);
-        setParentName(name);
+        setProfileNames(new Map(profileList.map((p) => [p.id, p.display_name])));
       } catch (err) {
         if (active) {
           setLoadError(
@@ -102,7 +104,11 @@ export default function SharedRecords({ familyId }: { familyId: string }) {
   function handleDownloadSummaries() {
     const csv = toCsv(
       ["Parent name", "Date", "Summary"],
-      summaries.map((s) => [parentName, new Date(s.created_at).toLocaleString(), s.summary]),
+      summaries.map((s) => [
+        profileNames.get(s.care_profile_id ?? "") ?? "",
+        new Date(s.created_at).toLocaleString(),
+        s.summary,
+      ]),
     );
     downloadCsv(`conversation-summaries-${familyId}.csv`, csv);
   }
@@ -111,7 +117,7 @@ export default function SharedRecords({ familyId }: { familyId: string }) {
     const csv = toCsv(
       ["Parent name", "Medicine", "Time", "Last taken", "Notes"],
       medicineRows.map((m) => [
-        parentName,
+        profileNames.get(m.careProfileId ?? "") ?? "",
         m.name,
         m.times.length > 0 ? m.times.join(", ") : "—",
         m.lastTaken ? new Date(m.lastTaken).toLocaleString() : "—",

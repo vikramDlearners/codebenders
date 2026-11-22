@@ -50,6 +50,11 @@ html:has(.lp) {
   color: var(--primary);
   font-size: 1.4rem;
 }
+.lp-logo-img {
+  width: 1.4rem;
+  height: 1.4rem;
+  object-fit: contain;
+}
 .lp-nav-links {
   display: flex;
   gap: 22px;
